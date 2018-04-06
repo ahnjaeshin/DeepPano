@@ -1,10 +1,3 @@
-import sys
-import pandas as pd
-import xml.etree.ElementTree as et
-import numpy as np
-import cv2
-from psd_tools import PSDImage
-
 '''
 
 python3 manage.py genData (marginType) (outputFileName)
@@ -15,12 +8,20 @@ python3 manage.py decideTarget (updateFileName)
 
 '''
 
+import sys
+import pandas as pd
+import xml.etree.ElementTree as et
+import numpy as np
+import cv2
+from psd_tools import PSDImage
+
+
 def __main__():
     
     if len(sys.argv) < 2:
-        print('need to input commands\n'
-                + 'genData (marginType) (outputFileName), or\n'
-                + 'decideTarget (updateFileName)')
+        print('need to input commands\n',
+                'genData (marginType) (outputFileName), or\n',
+                'decideTarget (updateFileName)')
         return
     
     command = str(sys.argv[1])
@@ -50,8 +51,7 @@ def generateDataset(marginType, outputFileName):
         print('cannot read MouthRawData file')
         return
 
-    rowNum = inputDf.shape[0]
-    colNum = inputDf.shape[1]
+    rowNum, colNum = inputDf.shape
     
     if colNum != 7:
         print('wrong number of columns')
@@ -84,47 +84,49 @@ def generateDatasetForEachFile(marginType, row):
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
     annotPsd = PSDImage.load(annotFileName)
     
-    if panoImg.shape != annotImg.shape:
-        print('panoFile and annotFile sizes do not match')
-        return
+    #if panoImg.shape != annotImg.shape:
+    #    print('panoFile and annotFile sizes do not match')
+    #    return
 
     imgShape = panoImg.shape
     
     
     # XML Parsing
-    tree = et.parse(xmlFileName)
-    root = tree.getroot()
+    root = et.parse(xmlFileName).getroot()
 
     for tooth in root.iter('Tooth'):
- 
-        toothNum = int(tooth.attrib)
+
+        print(tooth.attrib)
+        toothNum = int(tooth.attrib['Number'])
         coords = genCoordsFromTooth(tooth)
         # TODO: Better make it marginedCoords
         marginedXYs = calculateCoordsWithMargin(marginType, coords)
         leftMostCoor = (marginedXYs[0], marginedXYs[2])
         
         cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-        cropImage(cropPanoImg, marginedXYs)
+        cropPanoImg = cropImage(cropPanoImg, marginedXYs)
+        cropPanoImg = cv2.flip(cropPanoImg, 0)
 
-        cropBoxImg = np.zeros(imgShape, NP.unit8)
+        cropBoxImg = np.zeros(imgShape, np.uint8)
         genBoxImage(cropBoxImg, coords)
-        cropImage(cropBoxImg, marginedXYs)
+        cropBoxImg = cropImage(cropBoxImg, marginedXYs)
+        cropBoxImg = cv2.flip(cropBoxImg, 0)
         
-        # TODO: How to add channel info?
+        # Leave it for debugging usage
         inputImg = cv2.add(cropPanoImg, cropBoxImg)
         
-        # TODO: Better make it to gen annotImg then crop, just like boxImg
-        # Not sure if current code works
         cropAnnotImg = genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape)
-    
+        cropAnnotImg = cv2.flip(cropImage(cv2.flip(cropAnnotImg, 0), marginedXYs), 0)
+
         # TODO: Wrong tooth number check?
 
         # export images
-        # TODO: name convention needed
-        cv2.imwrite('A', cropPanoImg)
-        cv2.imwrite('B', cropBoxImg)
-        cv2.imwrite('C', inputImg)
-        cv2.imwrite('D', cropAnnotImg)
+        # TODO: mkdir and put pictures into it
+        url = '../data/metadata/' # TODO: +'(this excel folder)'
+        cv2.imwrite(url+'cropPanoImg'+str(toothNum)+'.jpg', cropPanoImg) #TODO: add Pano number
+        cv2.imwrite(url+'cropBoxImg'+str(toothNum)+'.jpg', cropBoxImg)
+        cv2.imwrite(url+'inputImg'+str(toothNum)+'.jpg', inputImg)
+        cv2.imwrite(url+'cropAnnotImg'+str(toothNum)+'.jpg', cropAnnotImg)
 
         # write row for .csv
         newRow = ['A'] # TODO: decide naming convention
@@ -136,43 +138,61 @@ def generateDatasetForEachFile(marginType, row):
 # TODO: Better make it cropImageWithMargin(img, coords, marginType)
 def cropImage(img, xYs):
     x1, x2, y1, y2 = xYs[0], xYs[1], xYs[2], xYs[3]
-    panoImg[y1:y2, x1:x2]
-    return
+    img = img[y1:y2, x1:x2]
+    return img
 
 
 def genBoxImage(img, coords):
 
+    x1, y1, x2, y2 = 5000, 5000, 0, 0
+
     for i in range(4):
-        cv2.line(img, coors[i], coors[(i+1)%4], 255, 1)
+        cv2.line(img, coords[i], coords[(i+1)%4], 255, 1)
+        x, y = coords[i]
+        if x < x1:
+            x1 = x
+        if y < y1:
+            y1 = y
+        if x > x2:
+            x2 = x
+        if y > y2:
+            y2 = y
     
     h, w = img.shape[:2]
-    mask = np.zeros((h+2, w+2), NP.uint8)
-    cv2.floodFill(img, mask, (int((x1+x2)/2), int(y1+y2)/2), 255)
+    mask = np.zeros((h+2, w+2), np.uint8)
+    print (x1, y1, x2, y2)
+    cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
     return
 
 
-# TODO: Better separate it into two parts
-def getAnnotImage(annotPsd, toothNum, marginedXYs, imgShape):
+def genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape):
     
-    # need a way to translate toothNum to layerNum or layer name
-    psdLayer = psd.layers[toothNum] # TODO: this assumes many things...
-    annotImg = psdLayer.as_PIL()
+    # TODO: we will take another method
+    psdLayer = None
+    for layer in annotPsd.layers:
+        if str(layer.name) == 'teeth_'+str(toothNum): # TODO: need to change
+            psdLayer = layer
+            break
+    layerImg = np.zeros(imgShape, np.uint8)
+    if psdLayer is None or psdLayer.bbox == (0, 0, 0, 0):
+        return layerImg
+    layerImg = psdLayer.as_PIL()
     
     b1, b2 = psdLayer.bbox.y1, psdLayer.bbox.y2
     b3, b4 = psdLayer.bbox.x1, psdLayer.bbox.x2
-    r, g, b, a = cv2.split(np.array(annotImg))
-    x1, x2, y1, y2 = marginedXYs[0], marginedXYs[1], marginedXYs[2], marginedXYs[3]
-    imgY = imgShape[0]
+    r, g, b, a = cv2.split(np.array(layerImg))
 
-    annotImg = cv2.merge([a, a, a])
-    annotImg = cv2.copyMakeBorder(annotImg, b1+y2-imgY, imgY-b2-y1, b3-x1, x2-b4,
-            cv2.BORDER_CONSTANT, value=[0, 0, 0])
-    
+    # get alpha channel from png and convert to grayscale
+    layerImg = cv2.merge([a, a, a])
+    layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
+    annotImg = np.zeros(imgShape, np.uint8)
+    annotImg[b1:b2, b3:b4] = layerImg
+       
     return annotImg
 
 
-def genCoordsFormTooth(tooth):
+def genCoordsFromTooth(tooth):
     coords = []
     for coord in tooth:
         coords.append((int(coord.attrib['X']), int(coord.attrib['Y'])))
