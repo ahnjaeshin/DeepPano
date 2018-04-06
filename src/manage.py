@@ -1,6 +1,6 @@
 '''
 
-python3 manage.py genData (marginType) (outputFileName)
+python3 manage.py genData (marginType) (inputFileName)
 
 or
 
@@ -9,6 +9,7 @@ python3 manage.py decideTarget (updateFileName)
 '''
 
 import sys
+import os
 import pandas as pd
 import xml.etree.ElementTree as et
 import numpy as np
@@ -20,7 +21,7 @@ def __main__():
     
     if len(sys.argv) < 2:
         print('need to input commands\n',
-                'genData (marginType) (outputFileName), or\n',
+                'genData (marginType) (inputFileName), or\n',
                 'decideTarget (updateFileName)')
         return
     
@@ -28,11 +29,11 @@ def __main__():
     
     if command == "genData":
         if len(sys.argv) != 4:
-            print('need to input marginType and outputFileName\n')
+            print('need to input marginType and inputFileName\n')
             return
         marginType = int(sys.argv[2])
-        outputFileName = str(sys.argv[3])
-        generateDataset(marginType, outputFileName)
+        inputFileName = str(sys.argv[3])
+        generateDataset(marginType, inputFileName)
     elif command == "decideTarget":
         if len(sys.argv) != 3:
             print('need to input updateFileName\n')
@@ -43,12 +44,12 @@ def __main__():
     return
 
 
-def generateDataset(marginType, outputFileName):
+def generateDataset(marginType, inputFileName):
     
     try:
         inputDf = pd.read_csv('../data/metadata/MouthRawData.csv') # TODO: decide file name
     except IOError:
-        print('cannot read MouthRawData file')
+        print('cannot read input file')
         return
 
     rowNum, colNum = inputDf.shape
@@ -59,27 +60,35 @@ def generateDataset(marginType, outputFileName):
 
     # TODO: columns check?
 
-    outCols = ['1'] # TODO: decide column names
+    outCsvFileName = '../data/metadata/tentative.csv' # TODO: autogenerate with timestamp & inputFileName & marginType 
+    outImgPath = '../data/metadata/testOutImg/' # TODO: autogenerate
+    if (os.path.exists(outImgPath)):
+        print('directory already exists for outImgPath' + outImgPath)
+        # skip here now for debugging purpose but later should output error
+    else:
+        os.mkdir(outImgPath)
+    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
+            'Left.Upmost.Coord', 'Tooth.Num.Panoseg', 'Margin.Type'] # TODO: decide column names
     rows = []
 
     for idx, row in inputDf.iterrows():
-        rows.extend(generateDatasetForEachFile(marginType, row))
-    
+        rows.extend(generateDatasetForEachFile(marginType, outImgPath, row))
+   
     outputDf = pd.DataFrame(rows, columns=outCols)
-    outputDf.to_csv(outputFileName, encoding='utf-8')
+    outputDf.to_csv(outCsvFileName, encoding='utf-8')
 
     return
 
 
-def generateDatasetForEachFile(marginType, row):
+def generateDatasetForEachFile(marginType, outImgPath, row):
 
     outRows = []
 
     # TODO: decide column names
     print(row)
-    panoFileName = row['pano.File']
-    xmlFileName = row['xml.File']
-    annotFileName = row['annot.File']
+    panoFileName = row['Pano.File']
+    xmlFileName = row['Xml.File']
+    annotFileName = row['Annot.File']
 
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
     annotPsd = PSDImage.load(annotFileName)
@@ -107,7 +116,7 @@ def generateDatasetForEachFile(marginType, row):
         cropPanoImg = cropImage(cropPanoImg, marginedXYs)
         cropPanoImg = cv2.flip(cropPanoImg, 0)
 
-        cropBoxImg = np.zeros(imgShape, np.uint8)
+        cropBoxImg = np.zeros(imgShape, dtype=np.uint8)
         genBoxImage(cropBoxImg, coords)
         cropBoxImg = cropImage(cropBoxImg, marginedXYs)
         cropBoxImg = cv2.flip(cropBoxImg, 0)
@@ -120,16 +129,21 @@ def generateDatasetForEachFile(marginType, row):
 
         # TODO: Wrong tooth number check?
 
+        #TODO: add Pano number
+        cpiName = outImgPath + 'cropPanoImg' + str(toothNum) + '.jpg'
+        cbiName = outImgPath + 'cropBoxImg' + str(toothNum) + '.jpg'
+        iiName = outImgPath + 'inputImg' + str(toothNum) + '.jpg' 
+        caiName = outImgPath + 'cropAnnotImg' + str(toothNum) + '.jpg' 
+
         # export images
-        # TODO: mkdir and put pictures into it
-        url = '../data/metadata/' # TODO: +'(this excel folder)'
-        cv2.imwrite(url+'cropPanoImg'+str(toothNum)+'.jpg', cropPanoImg) #TODO: add Pano number
-        cv2.imwrite(url+'cropBoxImg'+str(toothNum)+'.jpg', cropBoxImg)
-        cv2.imwrite(url+'inputImg'+str(toothNum)+'.jpg', inputImg)
-        cv2.imwrite(url+'cropAnnotImg'+str(toothNum)+'.jpg', cropAnnotImg)
+        cv2.imwrite(cpiName, cropPanoImg)
+        cv2.imwrite(cbiName, cropBoxImg)
+        cv2.imwrite(iiName, inputImg)
+        cv2.imwrite(caiName, cropAnnotImg)
 
         # write row for .csv
-        newRow = ['A'] # TODO: decide naming convention
+        newRow = [cpiName, cbiName, iiName, caiName, (marginedXYs[0], marginedXYs[2]),
+                toothNum, marginType]
         outRows.append(newRow)
 
     return outRows
@@ -159,7 +173,7 @@ def genBoxImage(img, coords):
             y2 = y
     
     h, w = img.shape[:2]
-    mask = np.zeros((h+2, w+2), np.uint8)
+    mask = np.zeros((h+2, w+2), dtype=np.uint8)
     print (x1, y1, x2, y2)
     cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
@@ -174,7 +188,7 @@ def genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape):
         if str(layer.name) == 'teeth_'+str(toothNum): # TODO: need to change
             psdLayer = layer
             break
-    layerImg = np.zeros(imgShape, np.uint8)
+    layerImg = np.zeros(imgShape, dtype=np.uint8)
     if psdLayer is None or psdLayer.bbox == (0, 0, 0, 0):
         return layerImg
     layerImg = psdLayer.as_PIL()
@@ -186,17 +200,14 @@ def genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape):
     # get alpha channel from png and convert to grayscale
     layerImg = cv2.merge([a, a, a])
     layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
-    annotImg = np.zeros(imgShape, np.uint8)
+    annotImg = np.zeros(imgShape, dtype=np.uint8)
     annotImg[b1:b2, b3:b4] = layerImg
        
     return annotImg
 
 
 def genCoordsFromTooth(tooth):
-    coords = []
-    for coord in tooth:
-        coords.append((int(coord.attrib['X']), int(coord.attrib['Y'])))
-    return coords
+    return [(int(coord.attrib['X']), int(coord.attrib['Y'])) for coord in tooth]
 
 
 def calculateCoordsWithMargin(marginType, coords):
@@ -209,10 +220,7 @@ def _calculateCoordsWithMargin1(coords):
 
     marginValue = 40
 
-    x1 = 5000
-    x2 = 0
-    y1 = 5000
-    y2 = 0
+    x1, x2, y1, y2 = 5000, 0, 5000, 0
     
     for coord in coords:
         x = coord[0]
@@ -232,7 +240,7 @@ def _calculateCoordsWithMargin1(coords):
     y1 -= marginValue
     y2 += marginValue
 
-    return [x1, x2, y1, y2]
+    return (x1, x2, y1, y2)
 
 
 if __name__ == '__main__':
