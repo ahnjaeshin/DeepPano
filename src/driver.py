@@ -1,43 +1,50 @@
 """
 
+
+timer interrupt
 """
 
 
 import argparse
-import configparser
-
-##############
-#  settings  #
-##############
+import json
+from preprocess import PanoSet
+from trainer import Trainer
+from torchvision import models, transforms
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--config", type=str, required=True, help="path to config file")
 
-parser.add_argument("--train-dir", type=str, required=True, help="directory of the train dataset (required)")
-parser.add_argument("--val-dir", type=str, required=True, help="directory of the validation dataset (required)")
-parser.add_argument("--test-dir", type=str, help="directory of the train dataset (optional)")
+MODE = ('train', 'val', 'test')
 
-# training settings
-parser.add_argument("--checkpoint", type=str, default=None, help="any checkpoint to resume from")
-parser.add_argument("--num-workers", type=int, default=16, help="number of workers for loading data (default:16)")
+def main(config):
+    config_dataset = config["dataset"]
+    assert all(m+'-dir' in config_dataset for m in MODE)
+    print (config_dataset)
 
-# augmentation settings
-parser.add_argument("--add-aug", )
+    augmentations = {
+        'train' : transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            # transforms.Normalize(mean=mean, std=std),
+        ]),
+        'val'  : transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            # transforms.Normalize(mean=mean, std=std),
+        ]),
+        'test' : None
+    }
+    assert all(m in augmentations for m in MODE)
 
-# learning settings
-parser.add_argument("--epochs", type=int, default=128, help="training epochs (default: 128)")
-parser.add_argument("--batch-size", type=int, default=32, help="batch size to load data (default: 32)")
-parser.add_argument("--lr-init", )
-parser.add_argument("--lr-schedule", )
+    datasets = {
+        x: PanoSet(config_dataset[x + '-dir'], transform=augmentations[x], target_transform=augmentations[x])
+            for x in MODE
+    }
 
-# evaluation settings
-parser.add_argument("--loss-func", type=str, )
-parser.add_argument("--add-metric", type=str, action="append")
-
-# log settings
-parser.add_argument("--slack-channel", type=str, default="#botlog", help="Slack channel that will receive log")
-parser.add_argument("--debug", default=False, action="store_true", help="")
-
-
+    t = Trainer(None, datasets, None, None, None)
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    main(json.load(open(args.config)))
+
+# json.dump(config, fp, sort_keys=True, indent=4)

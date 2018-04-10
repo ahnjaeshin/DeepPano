@@ -1,3 +1,6 @@
 .ipynb_checkpoints/
 rawdata/
+train/
 .vscode/
+__pycache__/
+runs/
