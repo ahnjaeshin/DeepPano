@@ -15,6 +15,8 @@ import xml.etree.ElementTree as et
 import numpy as np
 import cv2
 from psd_tools import PSDImage
+import time
+import datetime
 
 def __main__():
     
@@ -59,15 +61,22 @@ def generateDataset(marginType, inputFileName):
 
     # TODO: columns check?
 
-    outCsvFileName = '../data/metadata/tentative.csv' # TODO: autogenerate with timestamp & inputFileName & marginType 
-    outImgPath = '../data/metadata/testOutImg/' # TODO: autogenerate
+    timestamp = datetime.datetime.fromtimestamp(time.mktime(time.localtime())).strftime('%Y%m%d%H%M%S')
+    # TODO: should extract inputFileName from route using regex
+    outputFormat = inputFileName[17:-4] + '-' + timestamp + '-' + str(marginType)
+    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
+    outImgPath = '../data/metadata/' + outputFormat + '/'
     if (os.path.exists(outImgPath)):
         print('directory already exists for outImgPath' + outImgPath)
-        # skip here now for debugging purpose but later should output error
+        return
     else:
         os.mkdir(outImgPath)
+
+    print('outputRoute: {}'.format(outputFormat))
+
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
-            'Left.Upmost.Coord', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot', 'Margin.Type']
+            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
+            'Margin.Type', 'Segmentable.Type', 'Target.Img']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -112,6 +121,8 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         leftMostCoor, cropPanoImg = cropImageWithMargin(cropPanoImg, coords, marginType) # flipped
         cropPanoImg = cv2.flip(cropPanoImg, 0) # unflip
 
+        print('img size: {}'.format(cropPanoImg.shape))
+
         boxImg = np.zeros(imgShape, dtype=np.uint8)
         boxImg = genBoxImage(boxImg, coords) # flipped
         leftMostCoor, cropBoxImg = cropImageWithMargin(boxImg, coords, marginType)
@@ -139,7 +150,8 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         cv2.imwrite(caiName, cropAnnotImg)
 
         # write row for .csv
-        newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, toothNum, annotToothNum, marginType]
+        newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
+                annotToothNum, marginType, -1, -1]
         outRows.append(newRow)
 
     return outRows
@@ -163,7 +175,7 @@ def genBoxImage(img, coords):
     
     h, w = img.shape[:2]
     mask = np.zeros((h+2, w+2), dtype=np.uint8)
-    print('x1: {}, x2: {}, x3: {}, x4: {}'.format(x1, y1, x2, y2))
+    print('x1: {}, y1: {}, x2: {}, y2: {}'.format(x1, y1, x2, y2))
     cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
     return img
@@ -199,7 +211,8 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
         intersectionArea = np.sum(intersectionImg == 255)
         teethArea = np.sum(annotImg == 255)
         thisIOU = intersectionArea / teethArea
-        print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
+        if thisIOU > 0:
+            print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
         if (maxIOU <  thisIOU):
             maxIOU = thisIOU
             maxIOULayer = layer
@@ -217,18 +230,14 @@ def genCoordsFromTooth(tooth):
 
 
 def cropImageWithMargin(img, coords, marginType):
-    if marginType == 1:
-        return _cropImageWithMargin1(img, coords)
-    if marginType == 2:
-        return _cropImageWithMargin2(img, coords)
-    if marginType == 3:
-        return _cropImageWithMargin3(img, coords)
-    return (coords[0], img)
+    marginFuns = {1: _cropImageWithMargin1, 2: _cropImageWithMargin2, 3: _cropImageWithMargin3,
+            4: _cropImageWithMargin4, 5: _cropImageWithMargin5, 6: _cropImageWithMargin6,
+            7: _cropImageWithMargin7}
+    return marginFuns[marginType](img, coords)
 
 
-def _cropImageWithMargin1(img, coords):
+def __cropImageWithSimpleMargin(img, coords, marginList):
 
-    marginValue = 40
     x1, x2, y1, y2 = 5000, 0, 5000, 0
 
     for coord in coords:
@@ -244,20 +253,40 @@ def _cropImageWithMargin1(img, coords):
         if y > y2:
             y2 = y
 
-    x1 -= marginValue
-    x2 += marginValue
-    y1 -= marginValue
-    y2 += marginValue
+    x1 -= marginList[0]
+    x2 += marginList[1]
+    y1 -= marginList[2]
+    y2 += marginList[3]
 
     return ((x1, y1), img[y1:y2, x1:x2])
 
 
+def _cropImageWithMargin1(img, coords):
+    return __cropImageWithSimpleMargin(img, coords, [40, 40, 40, 40])
+
+
 def _cropImageWithMargin2(img, coords):
-    return ((0, 0), img)
+    return __cropImageWithSimpleMargin(img, coords, [50, 50, 80, 80])
 
 
 def _cropImageWithMargin3(img, coords):
-    return ((0, 0), img)
+    return __cropImageWithSimpleMargin(img, coords, [80, 80, 80, 80])
+
+
+def _cropImageWithMargin4(img, coords):
+    return __cropImageWithSimpleMargin(img, coords, [60, 60, 100, 100])
+
+
+def _cropImageWithMargin5(img, coords):
+    return __cropImageWithSimpleMargin(img, coords, [100, 100, 100, 100])
+
+
+def _cropImageWithMargin6(img, coords):
+    return __cropImageWithSimpleMargin(img, coords, [200, 200, 200, 200])
+
+
+def _cropImageWithMargin7(img, coords):
+    return __cropImageWithSimpleMargin(img, coords, [400, 400, 400, 400])
 
 
 if __name__ == '__main__':
