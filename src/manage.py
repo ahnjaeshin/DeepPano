@@ -15,7 +15,7 @@ import xml.etree.ElementTree as et
 import numpy as np
 import cv2
 from psd_tools import PSDImage
-
+import re
 
 def __main__():
     
@@ -47,14 +47,14 @@ def __main__():
 def generateDataset(marginType, inputFileName):
     
     try:
-        inputDf = pd.read_csv('../data/metadata/MouthRawData.csv') # TODO: decide file name
+        inputDf = pd.read_csv(inputFileName)
     except IOError:
         print('cannot read input file')
         return
 
     rowNum, colNum = inputDf.shape
     
-    if colNum != 7:
+    if colNum != 8:
         print('wrong number of columns')
         return
 
@@ -85,7 +85,8 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
     outRows = []
 
     # TODO: decide column names
-    print(row)
+    print('row: {}'.format(row))
+    imageTitle = row['Image.Title']
     panoFileName = row['Pano.File']
     xmlFileName = row['Xml.File']
     annotFileName = row['Annot.File']
@@ -130,10 +131,10 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         # TODO: Wrong tooth number check?
 
         #TODO: add Pano number
-        cpiName = outImgPath + 'cropPanoImg' + str(toothNum) + '.jpg'
-        cbiName = outImgPath + 'cropBoxImg' + str(toothNum) + '.jpg'
-        iiName = outImgPath + 'inputImg' + str(toothNum) + '.jpg' 
-        caiName = outImgPath + 'cropAnnotImg' + str(toothNum) + '.jpg' 
+        cpiName = outImgPath + 'cropPanoImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+        cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+        iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+        caiName = outImgPath + 'cropAnnotImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
 
         # export images
         cv2.imwrite(cpiName, cropPanoImg)
@@ -174,7 +175,7 @@ def genBoxImage(img, coords):
     
     h, w = img.shape[:2]
     mask = np.zeros((h+2, w+2), dtype=np.uint8)
-    print (x1, y1, x2, y2)
+    print('x1: {}, x2: {}, x3: {}, x4: {}'.format(x1, y1, x2, y2))
     cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
     return
