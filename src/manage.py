@@ -15,7 +15,6 @@ import xml.etree.ElementTree as et
 import numpy as np
 import cv2
 from psd_tools import PSDImage
-import re
 
 def __main__():
     
@@ -54,7 +53,7 @@ def generateDataset(marginType, inputFileName):
 
     rowNum, colNum = inputDf.shape
     
-    if colNum != 8:
+    if colNum != 4: # TODO: temporary
         print('wrong number of columns')
         return
 
@@ -68,7 +67,7 @@ def generateDataset(marginType, inputFileName):
     else:
         os.mkdir(outImgPath)
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
-            'Left.Upmost.Coord', 'Tooth.Num.Panoseg', 'Margin.Type'] # TODO: decide column names
+            'Left.Upmost.Coord', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot', 'Margin.Type']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -84,7 +83,6 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
     outRows = []
 
-    # TODO: decide column names
     print('row: {}'.format(row))
     imageTitle = row['Image.Title']
     panoFileName = row['Pano.File']
@@ -113,24 +111,25 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         marginedXYs = calculateCoordsWithMargin(marginType, coords)
         leftMostCoor = (marginedXYs[0], marginedXYs[2])
         
-        cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-        cropPanoImg = cropImage(cropPanoImg, marginedXYs)
-        cropPanoImg = cv2.flip(cropPanoImg, 0)
+        cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE) # flipped
+        cropPanoImg = cropImage(cropPanoImg, marginedXYs) # flipped
+        cropPanoImg = cv2.flip(cropPanoImg, 0) # unflip
 
-        cropBoxImg = np.zeros(imgShape, dtype=np.uint8)
-        genBoxImage(cropBoxImg, coords)
-        cropBoxImg = cropImage(cropBoxImg, marginedXYs)
-        cropBoxImg = cv2.flip(cropBoxImg, 0)
+        boxImg = np.zeros(imgShape, dtype=np.uint8)
+        boxImg = genBoxImage(boxImg, coords) # flipped
+        cropBoxImg = cropImage(boxImg, marginedXYs)
+        cropBoxImg = cv2.flip(cropBoxImg, 0) # unflip
         
         # Leave it for debugging usage
         inputImg = cv2.add(cropPanoImg, cropBoxImg)
         
-        cropAnnotImg = genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape)
-        cropAnnotImg = cv2.flip(cropImage(cv2.flip(cropAnnotImg, 0), marginedXYs), 0)
+        annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
+        cropAnnotImg = cropImage(annotImg, marginedXYs)
+        cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
         # TODO: Wrong tooth number check?
 
-        #TODO: add Pano number
+        # TODO: calculate imageTitle from panoFileName and delete imageTitle column from .csv
         cpiName = outImgPath + 'cropPanoImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
         cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
         iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
@@ -144,7 +143,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
         # write row for .csv
         newRow = [cpiName, cbiName, iiName, caiName, (marginedXYs[0], marginedXYs[2]),
-                toothNum, marginType]
+                toothNum, annotToothNum, marginType]
         outRows.append(newRow)
 
     return outRows
@@ -178,33 +177,50 @@ def genBoxImage(img, coords):
     print('x1: {}, x2: {}, x3: {}, x4: {}'.format(x1, y1, x2, y2))
     cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
-    return
+    return img
 
 
-def genAnnotImage(annotPsd, toothNum, marginedXYs, imgShape):
+def genAnnotImage(annotPsd, boxImg, imgShape):
     
-    # TODO: we will take another method
-    psdLayer = None
+    maxIOU = 0
+    maxIOULayer = None
+    maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
+
     for layer in annotPsd.layers:
-        if str(layer.name) == 'teeth_'+str(toothNum): # TODO: need to change
-            psdLayer = layer
-            break
-    layerImg = np.zeros(imgShape, dtype=np.uint8)
-    if psdLayer is None or psdLayer.bbox == (0, 0, 0, 0):
-        return layerImg
-    layerImg = psdLayer.as_PIL()
-    
-    b1, b2 = psdLayer.bbox.y1, psdLayer.bbox.y2
-    b3, b4 = psdLayer.bbox.x1, psdLayer.bbox.x2
-    r, g, b, a = cv2.split(np.array(layerImg))
+        if layer is None or layer.bbox == (0, 0, 0, 0):
+            continue
+        layerImg = np.array(layer.as_PIL())
 
-    # get alpha channel from png and convert to grayscale
-    layerImg = cv2.merge([a, a, a])
-    layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
-    annotImg = np.zeros(imgShape, dtype=np.uint8)
-    annotImg[b1:b2, b3:b4] = layerImg
-       
-    return annotImg
+        # get alpha channel from png and convert to grayscale
+        if (layerImg.shape[-1] != 4):
+            # Then this is background image
+            continue
+        r, g, b, a = cv2.split(layerImg)
+        layerImg = cv2.merge([a, a, a])
+        layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
+        ret, layerImg = cv2.threshold(layerImg, 200, 255, cv2.THRESH_BINARY)
+
+        annotImg = np.zeros(imgShape, dtype=np.uint8)
+        b1, b2 = layer.bbox.y1, layer.bbox.y2
+        b3, b4 = layer.bbox.x1, layer.bbox.x2
+        annotImg[b1:b2, b3:b4] = layerImg
+        annotImg = cv2.flip(annotImg, 0)
+
+        intersectionImg = cv2.bitwise_and(annotImg, boxImg)
+        intersectionArea = np.sum(intersectionImg == 255)
+        teethArea = np.sum(annotImg == 255)
+        thisIOU = intersectionArea / teethArea
+        print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
+        if (maxIOU <  thisIOU):
+            maxIOU = thisIOU
+            maxIOULayer = layer
+            maxIOULayerImg = annotImg
+
+    #if maxIOU < 0.8:
+    #    maxIOULayer = None
+    #    maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
+
+    return ((0, maxIOULayerImg) if maxIOULayer is None else (maxIOULayer.name, maxIOULayerImg))
 
 
 def genCoordsFromTooth(tooth):
