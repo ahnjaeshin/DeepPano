@@ -107,24 +107,21 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         print(tooth.attrib)
         toothNum = int(tooth.attrib['Number'])
         coords = genCoordsFromTooth(tooth)
-        # TODO: Better make it marginedCoords
-        marginedXYs = calculateCoordsWithMargin(marginType, coords)
-        leftMostCoor = (marginedXYs[0], marginedXYs[2])
         
         cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE) # flipped
-        cropPanoImg = cropImage(cropPanoImg, marginedXYs) # flipped
+        leftMostCoor, cropPanoImg = cropImageWithMargin(cropPanoImg, coords, marginType) # flipped
         cropPanoImg = cv2.flip(cropPanoImg, 0) # unflip
 
         boxImg = np.zeros(imgShape, dtype=np.uint8)
         boxImg = genBoxImage(boxImg, coords) # flipped
-        cropBoxImg = cropImage(boxImg, marginedXYs)
+        leftMostCoor, cropBoxImg = cropImageWithMargin(boxImg, coords, marginType)
         cropBoxImg = cv2.flip(cropBoxImg, 0) # unflip
         
         # Leave it for debugging usage
         inputImg = cv2.add(cropPanoImg, cropBoxImg)
         
         annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
-        cropAnnotImg = cropImage(annotImg, marginedXYs)
+        leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType)
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
         # TODO: Wrong tooth number check?
@@ -142,18 +139,10 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         cv2.imwrite(caiName, cropAnnotImg)
 
         # write row for .csv
-        newRow = [cpiName, cbiName, iiName, caiName, (marginedXYs[0], marginedXYs[2]),
-                toothNum, annotToothNum, marginType]
+        newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, toothNum, annotToothNum, marginType]
         outRows.append(newRow)
 
     return outRows
-
-
-# TODO: Better make it cropImageWithMargin(img, coords, marginType)
-def cropImage(img, xYs):
-    x1, x2, y1, y2 = xYs[0], xYs[1], xYs[2], xYs[3]
-    img = img[y1:y2, x1:x2]
-    return img
 
 
 def genBoxImage(img, coords):
@@ -227,18 +216,21 @@ def genCoordsFromTooth(tooth):
     return [(int(coord.attrib['X']), int(coord.attrib['Y'])) for coord in tooth]
 
 
-def calculateCoordsWithMargin(marginType, coords):
+def cropImageWithMargin(img, coords, marginType):
     if marginType == 1:
-        return _calculateCoordsWithMargin1(coords)
-    return []
+        return _cropImageWithMargin1(img, coords)
+    if marginType == 2:
+        return _cropImageWithMargin2(img, coords)
+    if marginType == 3:
+        return _cropImageWithMargin3(img, coords)
+    return (coords[0], img)
 
 
-def _calculateCoordsWithMargin1(coords):
+def _cropImageWithMargin1(img, coords):
 
     marginValue = 40
-
     x1, x2, y1, y2 = 5000, 0, 5000, 0
-    
+
     for coord in coords:
         x = coord[0]
         y = coord[1]
@@ -257,7 +249,15 @@ def _calculateCoordsWithMargin1(coords):
     y1 -= marginValue
     y2 += marginValue
 
-    return (x1, x2, y1, y2)
+    return ((x1, y1), img[y1:y2, x1:x2])
+
+
+def _cropImageWithMargin2(img, coords):
+    return ((0, 0), img)
+
+
+def _cropImageWithMargin3(img, coords):
+    return ((0, 0), img)
 
 
 if __name__ == '__main__':
