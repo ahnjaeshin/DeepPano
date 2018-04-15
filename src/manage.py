@@ -279,6 +279,8 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
             maxIOU = thisIOU
             maxIOULayer = layer
             maxIOULayerImg = annotImg
+        elif (sndMaxIOU < thisIOU):
+            sndMaxIOU = thisIOU
 
     #if maxIOU < 0.8:
     #    maxIOULayer = None
@@ -316,7 +318,6 @@ def __cropImageWithSimpleMargin(img, coords, marginList, imgShape):
         if y > y2:
             y2 = y
 
-    print(imgShape)
     x1 = (x1 - marginList[0]) if ((x1 - marginList[0]) > 0) else 0
     x2 = (x2 + marginList[1]) if ((x2 + marginList[0]) < imgShape[1]) else imgShape[1]
     y1 = (y1 - marginList[2]) if ((y1 - marginList[2]) > 0) else 0
