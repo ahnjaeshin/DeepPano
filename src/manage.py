@@ -177,14 +177,14 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         coords = genCoordsFromTooth(tooth)
         
         cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE) # flipped
-        leftMostCoor, cropPanoImg = cropImageWithMargin(cropPanoImg, coords, marginType) # flipped
+        leftMostCoor, cropPanoImg = cropImageWithMargin(cropPanoImg, coords, marginType, imgShape)
         cropPanoImg = cv2.flip(cropPanoImg, 0) # unflip
 
         print('img size: {}'.format(cropPanoImg.shape))
 
         boxImg = np.zeros(imgShape, dtype=np.uint8)
         boxImg = genBoxImage(boxImg, coords) # flipped
-        leftMostCoor, cropBoxImg = cropImageWithMargin(boxImg, coords, marginType)
+        leftMostCoor, cropBoxImg = cropImageWithMargin(boxImg, coords, marginType, imgShape)
         cropBoxImg = cv2.flip(cropBoxImg, 0) # unflip
         
         # Leave it for debugging usage
@@ -192,7 +192,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         cv2.addWeighted(cv2.add(cropPanoImg, cropBoxImg), 0.2, inputImg, 0.8, 0, inputImg)
         
         maxIOU, sndMaxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
-        leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType)
+        leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType, imgShape)
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
         # TODO: Wrong tooth number check?
@@ -292,14 +292,14 @@ def genCoordsFromTooth(tooth):
     return [(int(coord.attrib['X']), int(coord.attrib['Y'])) for coord in tooth]
 
 
-def cropImageWithMargin(img, coords, marginType):
+def cropImageWithMargin(img, coords, marginType, imgShape):
     marginFuns = {1: _cropImageWithMargin1, 2: _cropImageWithMargin2, 3: _cropImageWithMargin3,
             4: _cropImageWithMargin4, 5: _cropImageWithMargin5, 6: _cropImageWithMargin6,
             7: _cropImageWithMargin7}
-    return marginFuns[marginType](img, coords)
+    return marginFuns[marginType](img, coords, imgShape)
 
 
-def __cropImageWithSimpleMargin(img, coords, marginList):
+def __cropImageWithSimpleMargin(img, coords, marginList, imgShape):
 
     x1, x2, y1, y2 = 5000, 0, 5000, 0
 
@@ -316,40 +316,41 @@ def __cropImageWithSimpleMargin(img, coords, marginList):
         if y > y2:
             y2 = y
 
-    x1 -= marginList[0]
-    x2 += marginList[1]
-    y1 -= marginList[2]
-    y2 += marginList[3]
+    print(imgShape)
+    x1 = (x1 - marginList[0]) if ((x1 - marginList[0]) > 0) else 0
+    x2 = (x2 + marginList[1]) if ((x2 + marginList[0]) < imgShape[1]) else imgShape[1]
+    y1 = (y1 - marginList[2]) if ((y1 - marginList[2]) > 0) else 0
+    y2 = (y2 + marginList[3]) if ((y2 + marginList[3]) < imgShape[0]) else imgShape[0]
 
     return ((x1, y1), img[y1:y2, x1:x2])
 
 
-def _cropImageWithMargin1(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [40, 40, 40, 40])
+def _cropImageWithMargin1(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [40, 40, 40, 40], imgShape)
 
 
-def _cropImageWithMargin2(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [50, 50, 80, 80])
+def _cropImageWithMargin2(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [50, 50, 80, 80], imgShape)
 
 
-def _cropImageWithMargin3(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [80, 80, 80, 80])
+def _cropImageWithMargin3(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [80, 80, 80, 80], imgShape)
 
 
-def _cropImageWithMargin4(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [60, 60, 100, 100])
+def _cropImageWithMargin4(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [60, 60, 100, 100], imgShape)
 
 
-def _cropImageWithMargin5(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [100, 100, 100, 100])
+def _cropImageWithMargin5(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [100, 100, 100, 100], imgShape)
 
 
-def _cropImageWithMargin6(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [200, 200, 200, 200])
+def _cropImageWithMargin6(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [200, 200, 200, 200], imgShape)
 
 
-def _cropImageWithMargin7(img, coords):
-    return __cropImageWithSimpleMargin(img, coords, [400, 400, 400, 400])
+def _cropImageWithMargin7(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [400, 400, 400, 400], imgShape)
 
 
 if __name__ == '__main__':
