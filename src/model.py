@@ -11,17 +11,20 @@ class ConvBlock(nn.Module):
     """
     def __init__(self, in_channel, out_channel):
         super(ConvBlock, self).__init__()
-        self.layer = nn.Sequential(
-            conv3(in_channel, out_channel),
-            nn.BatchNorm2d(out_channel),
-            nn.ELU(inplace=True),
-            conv3(out_channel, out_channel),
-            nn.BatchNorm2d(out_channel),
-            nn.ELU(inplace=True)
-        )
-    
+        self.conv1 = conv3(in_channel, out_channel)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.elu1 = nn.ELU(inplace=True)
+        self.conv2 = conv3(out_channel, out_channel)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+        self.elu2 = nn.ELU(inplace=True)
+
     def forward(self, x):
-        x = self.layer(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.elu1(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.elu2(x)
         return x
 
 class InBlock(nn.Module):
@@ -53,7 +56,7 @@ class DownBlock(nn.Module):
         return x
 
 class UpBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, bilinear=True):
+    def __init__(self, in_channel, out_channel, bilinear):
         super(UpBlock, self).__init__()
         self.up = nn.Upsample(scale_factor=2, mode='bilinear') if bilinear \
                         else nn.ConvTranspose2d(in_channel, out_channel, kernel_size=2, stride=2)
@@ -69,7 +72,6 @@ class UpBlock(nn.Module):
         x = torch.cat([x, prev], dim=1)
         x = self.layer(x)
         return x
-
 
 class UNet(nn.Module):
     def __init__(self, channels, classes, bilinear=True):
