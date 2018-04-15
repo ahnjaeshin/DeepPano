@@ -57,7 +57,7 @@ def decideTarget(updateFileName):
         return
 
     rowNum, colNum = inputDf.shape
-    if colNum != 12:
+    if colNum != 14:
         print('wrong number of columns')
         return
 
@@ -65,7 +65,7 @@ def decideTarget(updateFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -108,7 +108,7 @@ def generateDataset(marginType, inputFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -188,9 +188,10 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         cropBoxImg = cv2.flip(cropBoxImg, 0) # unflip
         
         # Leave it for debugging usage
-        inputImg = cv2.add(cropPanoImg, cropBoxImg)
+        inputImg = cv2.copyMakeBorder(cropPanoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+        cv2.addWeighted(cv2.add(cropPanoImg, cropBoxImg), 0.2, inputImg, 0.8, 0, inputImg)
         
-        annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
+        maxIOU, sndMaxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
         leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType)
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
@@ -210,7 +211,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
         # write row for .csv
         newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
-                annotToothNum, marginType, -1, -1]
+                annotToothNum, maxIOU, sndMaxIOU, marginType, -1, -1]
         outRows.append(newRow)
 
     return outRows
@@ -241,8 +242,9 @@ def genBoxImage(img, coords):
 
 
 def genAnnotImage(annotPsd, boxImg, imgShape):
-    
+
     maxIOU = 0
+    sndMaxIOU = 0
     maxIOULayer = None
     maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
@@ -273,6 +275,7 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
         if thisIOU > 0:
             print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
         if (maxIOU <  thisIOU):
+            sndMaxIOU = maxIOU
             maxIOU = thisIOU
             maxIOULayer = layer
             maxIOULayerImg = annotImg
@@ -281,7 +284,8 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
     #    maxIOULayer = None
     #    maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
-    return ((0, maxIOULayerImg) if maxIOULayer is None else (maxIOULayer.name, maxIOULayerImg))
+    return ((maxIOU, sndMaxIOU, 0, maxIOULayerImg) if maxIOULayer is None
+            else (maxIOU, sndMaxIOU, maxIOULayer.name, maxIOULayerImg))
 
 
 def genCoordsFromTooth(tooth):
