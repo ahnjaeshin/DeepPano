@@ -17,6 +17,9 @@ import cv2
 from psd_tools import PSDImage
 import time
 import datetime
+import copy
+import re
+
 
 def __main__():
     
@@ -41,6 +44,35 @@ def __main__():
             return
         updateFileName = str(sys.argv[2])
         decideTarget(updateFileName)
+
+    return
+
+
+def decideTarget(updateFileName):
+
+    try:
+        inputDf = pd.read_csv(updateFileName)
+    except IOError:
+        print('cannot read input file')
+        return
+
+    rowNum, colNum = inputDf.shape
+    if colNum != 12:
+        print('wrong number of columns')
+        return
+
+    # TODO: columns check?
+
+    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
+            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
+            'Margin.Type', 'Segmentable.Type', 'Target.Img']
+    rows = []
+
+    for idx, row in inputDf.iterrows():
+        rows.append(generateTargetImage(row))
+
+    outputDf = pd.DataFrame(rows, columns=outCols)
+    outputDf.to_csv(updateFileName, encoding='utf-8')
 
     return
 
@@ -86,6 +118,33 @@ def generateDataset(marginType, inputFileName):
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
 
     return
+
+
+def generateTargetImage(row):
+
+    outRow = copy.deepcopy(row.tolist())
+
+    cropAnnotImg = cv2.imread(row['Cropped.Annot.Img'], cv2.IMREAD_GRAYSCALE)
+    targetImg = cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+    segType = row['Segmentable.Type']
+
+    imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
+    if (segType == -1):
+        print('{} segmentable type is not set. skip.'.format(imgName))
+        return outRow[1:]
+
+    if (segType >= 10): # not segmentable
+        targetImg = np.zeros(cropAnnotImg.shape, dtype=np.uint8)
+
+    tiName = re.sub('cropAnnotImg', 'targetImg', row['Cropped.Annot.Img'])
+    cv2.imwrite(tiName, targetImg)
+
+    print('{} segmentable type is {}. gen target Img.'.format(imgName, segType))
+
+    outRow = outRow[1:-1]
+    outRow.append(tiName)
+    return outRow
+
 
 
 def generateDatasetForEachFile(marginType, outImgPath, row):
