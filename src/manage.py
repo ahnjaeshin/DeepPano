@@ -57,7 +57,7 @@ def decideTarget(updateFileName):
         return
 
     rowNum, colNum = inputDf.shape
-    if colNum != 14:
+    if colNum != 15:
         print('wrong number of columns')
         return
 
@@ -65,7 +65,7 @@ def decideTarget(updateFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -108,7 +108,7 @@ def generateDataset(marginType, inputFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -129,8 +129,8 @@ def generateTargetImage(row):
     segType = row['Segmentable.Type']
 
     imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
-    if (segType == -1):
-        print('{} segmentable type is not set. skip.'.format(imgName))
+    if (segType < 0):
+        print('{} segmentable type is error {}. skip.'.format(imgName, segType))
         return outRow[1:]
 
     if (segType >= 10): # not segmentable
@@ -191,7 +191,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         inputImg = cv2.copyMakeBorder(cropPanoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
         cv2.addWeighted(cv2.add(cropPanoImg, cropBoxImg), 0.2, inputImg, 0.8, 0, inputImg)
         
-        maxIOU, sndMaxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
+        maxIOU, sndMaxIOU, boxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
         leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType, imgShape)
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
@@ -211,7 +211,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
         # write row for .csv
         newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
-                annotToothNum, maxIOU, sndMaxIOU, marginType, -1, -1]
+                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, -1, -1]
         outRows.append(newRow)
 
     return outRows
@@ -245,6 +245,7 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
 
     maxIOU = 0
     sndMaxIOU = 0
+    boxIOU = 0
     maxIOULayer = None
     maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
@@ -271,12 +272,16 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
         intersectionImg = cv2.bitwise_and(annotImg, boxImg)
         intersectionArea = np.sum(intersectionImg == 255)
         teethArea = np.sum(annotImg == 255)
+        boxArea = np.sum(boxImg == 255)
         thisIOU = intersectionArea / teethArea
+        thisBoxIOU = intersectionArea / boxArea
+
         if thisIOU > 0:
             print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
         if (maxIOU <  thisIOU):
             sndMaxIOU = maxIOU
             maxIOU = thisIOU
+            boxIOU = thisBoxIOU
             maxIOULayer = layer
             maxIOULayerImg = annotImg
         elif (sndMaxIOU < thisIOU):
@@ -286,8 +291,8 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
     #    maxIOULayer = None
     #    maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
-    return ((maxIOU, sndMaxIOU, 0, maxIOULayerImg) if maxIOULayer is None
-            else (maxIOU, sndMaxIOU, maxIOULayer.name, maxIOULayerImg))
+    return ((maxIOU, sndMaxIOU, boxIOU, 0, maxIOULayerImg) if maxIOULayer is None
+            else (maxIOU, sndMaxIOU, boxIOU, maxIOULayer.name, maxIOULayerImg))
 
 
 def genCoordsFromTooth(tooth):
