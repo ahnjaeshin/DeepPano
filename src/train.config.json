@@ -1,8 +1,6 @@
 {
     "dataset": {
-        "train-dir": "",
-        "val-dir": "",
-        "test-dir": ""
+        "data-dir": ""
     },
     "augmentation": {
         "train": {
@@ -11,9 +9,7 @@
             "target": [],
             "both": []
         },
-        "val": {
-            
-        },
+        "val": {},
         "test": {
             "input": [],
             "target": []

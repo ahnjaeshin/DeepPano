@@ -24,7 +24,7 @@ MODE = ('train', 'val', 'test')
 
 def main(config):
     config_dataset = config["dataset"]
-    assert all(m+'-dir' in config_dataset for m in MODE)
+    assert 'data-dir' in config_dataset
     
     config_augmentation = config["augmentation"]
     config_model = config["model"]
@@ -63,8 +63,9 @@ def main(config):
     assert all(m in augmentations for m in MODE)
 
     datasets = {
-        x: PanoSet(config_dataset[x + '-dir'], transform=augmentations[x], target_transform=target_augmentations[x])
-            for x in MODE
+        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train / Val'] == 'train'), transform=augmentations['train'], target_transform=target_augmentations['train']),
+        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train / Val'] == 'val'), transform=augmentations['val'], target_transform=target_augmentations['val']),
+        'test': None
     }
 
     model = UNet(2, 1)

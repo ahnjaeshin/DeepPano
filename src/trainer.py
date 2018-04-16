@@ -69,8 +69,8 @@ class Trainer():
 
     def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq_ratio = 10):
         
-        # slack_message('train started', '#botlog')
-        # slack_message(self.model.__repr__, '#botlog')
+        slack_message('train started', '#botlog')
+        slack_message(self.model.__repr__, '#botlog')
 
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
@@ -96,6 +96,9 @@ class Trainer():
 
             log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
             tqdm.write(log)
+            slack_message(log, '#botlog')
+
+        slack_message('train ended', '#botlog')
 
     def train_once(self, epoch, dataloader, train=True, log_freq_ratio = 10):
         
@@ -111,7 +114,7 @@ class Trainer():
             self.model.train(False) # same as self.model.eval()
 
         start = time.time()
-        for batch_idx, (data, target, filename, index) in enumerate(tqdm(dataloader, desc='batch')):
+        for batch_idx, (data, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
 
             data_time = time.time() - start
             data_times.append(data_time)
