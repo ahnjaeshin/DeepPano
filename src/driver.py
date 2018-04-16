@@ -56,7 +56,12 @@ def main(config):
             # transforms.Normalize(mean=(0,), std=(1,)),
             
         ]),
-        'val'  : None,
+        'val'  : transforms.Compose([
+            transforms.Resize((224, 224)),
+
+            transforms.ToTensor(),
+            # transforms.Normalize(mean=(0,0), std=(255,255)),
+        ]),
         'test' : None,
     }
 

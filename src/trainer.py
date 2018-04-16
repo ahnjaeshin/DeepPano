@@ -58,7 +58,7 @@ class Trainer():
         self.scheduler = scheduler
         self.metrics = metrics
 
-        if torch.cuda.is_available(): 
+        if not torch.cuda.is_available(): 
             print("CUDA is unavailable. It'll be very slow...")
         
         self.writer = SummaryWriter(comment="UNet")
