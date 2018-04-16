@@ -1,0 +1,64 @@
+{
+    "dataset": {
+        "train-dir": "",
+        "val-dir": "",
+        "test-dir": ""
+    },
+    "augmentation": {
+        "train": {
+            "input": [],
+            "guideline": [],
+            "target": [],
+            "both": []
+        },
+        "val": {
+            
+        },
+        "test": {
+            "input": [],
+            "target": []
+        }
+    },
+    "model": {
+        "use_dropout": true,
+        "name": "example1",
+        "checkpoint": null,
+        "config": {
+            "type": null,
+            "input_channel": 2,
+            "output_channel": 1
+        }
+    },
+    "training": {
+        "epochs": 2,
+        "batch_size": 16,
+        "num_workers": 16
+    },
+    "learning": {
+        "weight_init": "He",
+        "hard_example_mining": false,
+        "lr_init": 1,
+        "lr_schedule": {
+            "type": "step",
+            "param": {}
+        },
+        "optimizer": {
+            "type": "SGD",
+            "param": {
+                "nestrov": true
+            }
+        },
+        "emsemble": true
+    },
+    "evaluation": {
+        "loss": "cross_entropy",
+        "metrics": [
+            "accuracy",
+            "IoU"
+        ]
+    },
+    "logging": {
+        "slack_channel": "#botlog",
+        "debug": true
+    }
+}

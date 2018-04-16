@@ -7,9 +7,15 @@ timer interrupt
 
 import argparse
 import json
+
+import torch
+import torch.nn as nn
+
+from model import UNet
 from preprocess import PanoSet
-from trainer import Trainer
 from torchvision import models, transforms
+from trainer import Trainer
+from metric import IOU
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
@@ -19,29 +25,60 @@ MODE = ('train', 'val', 'test')
 def main(config):
     config_dataset = config["dataset"]
     assert all(m+'-dir' in config_dataset for m in MODE)
-    print (config_dataset)
+    
+    config_augmentation = config["augmentation"]
+    config_model = config["model"]
+    config_training = config["training"]
+    config_learning = config["learning"]
+    config_evaluation = config["evaluation"]
+    config_logging = config["logging"]
 
     augmentations = {
         'train' : transforms.Compose([
             transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            # transforms.Normalize(mean=mean, std=std),
+            transforms.ToTensor(),         
+            transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'val'  : transforms.Compose([
             transforms.Resize((224, 224)),
+
             transforms.ToTensor(),
-            # transforms.Normalize(mean=mean, std=std),
+            # transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'test' : None
     }
+
+    target_augmentations = {
+        'train' : transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 )),
+            transforms.ToTensor(),         
+            # transforms.Normalize(mean=(0,), std=(1,)),
+            
+        ]),
+        'val'  : None,
+        'test' : None,
+    }
+
     assert all(m in augmentations for m in MODE)
 
     datasets = {
-        x: PanoSet(config_dataset[x + '-dir'], transform=augmentations[x], target_transform=augmentations[x])
+        x: PanoSet(config_dataset[x + '-dir'], transform=augmentations[x], target_transform=target_augmentations[x])
             for x in MODE
     }
 
-    t = Trainer(None, datasets, None, None, None)
+    model = UNet(2, 1)
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 20, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+    metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8)]
+
+    trainer = Trainer(model, datasets, criterion, optimizer, scheduler, metrics)
+
+    trainer.train(batch_size=config_training['batch_size'],
+                  num_workers=config_training['num_workers'],
+                  epochs=config_training['epochs'])
 
 if __name__ == "__main__":
     args = parser.parse_args()
