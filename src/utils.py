@@ -7,6 +7,9 @@ import logging
 
 from slacker import Slacker
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 def logger(func):
     """decorator to log arguments passed into the function
     
