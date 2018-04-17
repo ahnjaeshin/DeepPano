@@ -57,7 +57,7 @@ def decideTarget(updateFileName):
         return
 
     rowNum, colNum = inputDf.shape
-    if colNum != 15:
+    if colNum != 16:
         print('wrong number of columns')
         return
 
@@ -65,7 +65,8 @@ def decideTarget(updateFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
+            'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -87,7 +88,7 @@ def generateDataset(marginType, inputFileName):
 
     rowNum, colNum = inputDf.shape
     
-    if colNum != 4: # TODO: temporary
+    if colNum != 5: # TODO: temporary
         print('wrong number of columns')
         return
 
@@ -108,7 +109,8 @@ def generateDataset(marginType, inputFileName):
 
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img']
+            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
+            'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -141,8 +143,10 @@ def generateTargetImage(row):
 
     print('{} segmentable type is {}. gen target Img.'.format(imgName, segType))
 
-    outRow = outRow[1:-1]
+    trainVal = outRow[-1]
+    outRow = outRow[1:-2]
     outRow.append(tiName)
+    outRow.append(trainVal)
     return outRow
 
 
@@ -211,7 +215,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
         # write row for .csv
         newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
-                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, -1, -1]
+                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, -1, -1, row['Train.Val']]
         outRows.append(newRow)
 
     return outRows
