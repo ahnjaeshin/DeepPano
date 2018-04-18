@@ -52,7 +52,7 @@ class PanoSet(Dataset):
                 pano_path = getAbsoluteAddress(row['Cropped.Pano.Img'])
                 segment_path = getAbsoluteAddress(row['Cropped.Box.Img'])
                 input_path = getAbsoluteAddress(row['Cropped.Input.Img'])
-                target_path = getAbsoluteAddress(row['Cropped.Annot.Img'])
+                target_path = getAbsoluteAddress(row['Target.Img'])
 
                 data.append(Patch(pano_path, segment_path, input_path, target_path))
         

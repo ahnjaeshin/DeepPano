@@ -72,4 +72,4 @@ class IOU(Metric):
         return intersection / union
 
     def __repr__(self):
-        return 'IoU, threshold: {}, saving output: {}'.format(self.threshold, self.save_output)
+        return 'IoU, threshold: {}'.format(self.threshold)

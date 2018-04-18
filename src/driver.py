@@ -13,7 +13,7 @@ import torch.nn as nn
 
 from model import UNet
 from preprocess import PanoSet
-from torchvision import models, transforms
+from torchvision import transforms
 from trainer import Trainer
 from metric import IOU
 
@@ -41,9 +41,8 @@ def main(config):
         ]),
         'val'  : transforms.Compose([
             transforms.Resize((224, 224)),
-
-            transforms.ToTensor(),
-            # transforms.Normalize(mean=(0,0), std=(255,255)),
+            transforms.ToTensor(),         
+            transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'test' : None
     }
@@ -58,8 +57,8 @@ def main(config):
         ]),
         'val'  : transforms.Compose([
             transforms.Resize((224, 224)),
-
-            transforms.ToTensor(),
+            transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 )),
+            transforms.ToTensor(),      
             # transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'test' : None,
@@ -68,8 +67,8 @@ def main(config):
     assert all(m in augmentations for m in MODE)
 
     datasets = {
-        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train / Val'] == 'train'), transform=augmentations['train'], target_transform=target_augmentations['train']),
-        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train / Val'] == 'val'), transform=augmentations['val'], target_transform=target_augmentations['val']),
+        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'train'), transform=augmentations['train'], target_transform=target_augmentations['train']),
+        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'val'), transform=augmentations['val'], target_transform=target_augmentations['val']),
         'test': None
     }
 
@@ -80,7 +79,9 @@ def main(config):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
     metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8)]
 
-    trainer = Trainer(model, datasets, criterion, optimizer, scheduler, metrics)
+    checkpoint = config_model["checkpoint"]
+
+    trainer = Trainer(model, datasets, criterion, optimizer, scheduler, metrics, checkpoint)
 
     trainer.train(batch_size=config_training['batch_size'],
                   num_workers=config_training['num_workers'],

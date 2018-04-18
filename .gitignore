@@ -4,3 +4,4 @@ train/
 .vscode/
 __pycache__/
 runs/
+*.pth.tar
