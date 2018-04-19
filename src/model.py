@@ -56,21 +56,24 @@ class DownBlock(nn.Module):
         return x
 
 class UpBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, bilinear):
+    def __init__(self, in_channel, forward_channel, out_channel, bilinear):
         super(UpBlock, self).__init__()
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear') if bilinear \
-                        else nn.ConvTranspose2d(in_channel, out_channel, kernel_size=2, stride=2)
 
-        self.layer = ConvBlock(in_channel, out_channel)
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+        else:
+            self.up = nn.ConvTranspose2d(in_channel, in_channel, kernel_size=2, stride=2)
+
+        self.layer = ConvBlock(in_channel + forward_channel, out_channel)
 
     def forward(self, x, prev):
-        x = self.up(x)
+        x = self.up(x) # in_channel -> in_channel
         diffX = x.size()[2] - prev.size()[2]
         diffY = x.size()[3] - prev.size()[3]
         prev = F.pad(prev, (diffX // 2, int(diffX / 2),
                            diffY // 2, int(diffY / 2)))
         x = torch.cat([x, prev], dim=1)
-        x = self.layer(x)
+        x = self.layer(x) # in_channel + forward_channel => out_channel
         return x
 
 class UNet(nn.Module):
@@ -81,10 +84,10 @@ class UNet(nn.Module):
         self.down2 = DownBlock(32, 64)
         self.down3 = DownBlock(64, 128)
         self.down4 = DownBlock(128, 128)
-        self.up1 = UpBlock(256, 64, bilinear)
-        self.up2 = UpBlock(128, 32, bilinear)
-        self.up3 = UpBlock(64, 16, bilinear)
-        self.up4 = UpBlock(32, 16, bilinear)
+        self.up1 = UpBlock(128, 128, 64, bilinear)
+        self.up2 = UpBlock(64, 64, 32, bilinear)
+        self.up3 = UpBlock(32, 32, 16, bilinear)
+        self.up4 = UpBlock(16, 16, 16, bilinear)
         self.out_conv = OutBlock(16, classes)
 
     def forward(self, x):
