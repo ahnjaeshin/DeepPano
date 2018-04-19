@@ -6,57 +6,19 @@ class Metric():
        (output, target)
     """
 
-    def __init__(self, threshold = 0.5, save_output = False):
-        self.raw = []
-        self.indexes = []
-        self.save_output = save_output
+    def __init__(self, threshold = 0.5):
         self.threshold = threshold
-
-    def add(self, *measure):
-        """add new result
-        
-        Arguments:
-            output -- output of model
-            target -- actual label
-        """
-        index = self.eval(*measure)
-        self.indexes.append( index )
-        if self.save_output: 
-            self.raw.append(measure)
-        
-        return index
-
-    def zero(self):
-        """clear data
-        """
-        self.indexes = []
-        self.raw = []
 
     def eval(self, *measure):
         raise NotImplementedError
-
-    def mean(self):
-        return np.average(self.indexes)
-
-    def max(self):
-        return np.max(self.indexes)
-
-    def min(self):
-        return np.min(self.indexes)  
-
-    def hist(self):
-        return np.array(self.indexes)
-
-    def getRecentScore(self):
-        return self.indexes[-1]
 
     def __repr__(self):
         raise NotImplementedError
 
 class IOU(Metric):
 
-    def __init__(self, threshold = 0.5, save_output = False):
-        super(IOU, self).__init__(threshold, save_output)
+    def __init__(self, threshold = 0.5):
+        super(IOU, self).__init__(threshold)
 
     def eval(self, *measure):
         output = measure[0]

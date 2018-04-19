@@ -120,6 +120,8 @@ class Trainer():
         backward_times = AverageMeter()
         data_times = AverageMeter()
         curr_scores = AverageMeter()
+        
+        metric_scores = [AverageMeter() for metric in self.metrics]
 
         best_score = 0
 
@@ -149,25 +151,24 @@ class Trainer():
             backward_times.update(time.time() - forward_times.val)
             start = time.time()
 
-            for metric in self.metrics:
-                curr_score = 0
-                curr_score = curr_score + metric.add(output.data.cpu().numpy(), target.data.cpu().numpy())
-                curr_scores.update(curr_score)
+            for m in zip(self.metrics, metric_scores):
+                m[1].update(m[0].eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
+                curr_scores.update(m[1].val)
 
             if batch_idx == len(dataloader) - 1:
                 log = [
                     '[{}]'.format(state),
-                    'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx, len(dataloader)),
+                    'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
                     'Forward Time {time.val:.3f} ({time.avg:.3f})'.format(time=forward_times),
                     'Backward Time {time.val:.3f} ({time.avg:.3f})'.format(time=backward_times),
                     'Data {time.val:.3f} ({time.avg:.3f})'.format(time=data_times),
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses),
                 ]
 
-                writer.add_scalar('time/forward', forward_times.val, epoch)
-                writer.add_scalar('time/backward', backward_times.val, epoch)
-                writer.add_scalar('time/data', data_times.val, epoch)
-                writer.add_scalar('loss', losses.val, epoch)
+                writer.add_scalar('time/forward', forward_times.avg, epoch)
+                writer.add_scalar('time/backward', backward_times.avg, epoch)
+                writer.add_scalar('time/data', data_times.avg, epoch)
+                writer.add_scalar('loss', losses.avg, epoch)
 
                 if train:
                     lr = [group['lr'] for group in self.optimizer.param_groups][0]
@@ -179,9 +180,9 @@ class Trainer():
                         writer.add_histogram('model/(train)' + tag, value.data.cpu().numpy(), epoch, bins='doane')
                         writer.add_histogram('model/(train)' + tag + '/grad', value.grad.data.cpu().numpy(), epoch, bins='doane')
 
-                for metric in self.metrics:
-                    log.append('metric/{}: {:.5f} ({:.5f})'.format(metric.__repr__(), metric.getRecentScore(), metric.mean()))
-                    writer.add_scalar('metric/{}'.format(metric.__repr__()), metric.getRecentScore(), epoch)
+                for metric in metric_scores:
+                    log.append('metric/{name}: {metric.val:.5f} ({metric.avg:.5f})'.format(name=metric.__repr__(), metric=metric))
+                    writer.add_scalar('metric/{}'.format(metric.__repr__()), metric.avg, epoch)
                 log = "\n".join(log)
 
                 writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
@@ -194,8 +195,8 @@ class Trainer():
                 tqdm.write(log)
                 slack_message(log, '#botlog')
 
-                is_best = self.best_score < curr_score
-                self.best_score = max(self.best_score, curr_score)
+                is_best = self.best_score < curr_scores.avg
+                self.best_score = max(self.best_score, curr_scores.avg)
 
                 if checkpoint:
                     self.save_checkpoint(epoch, is_best)
