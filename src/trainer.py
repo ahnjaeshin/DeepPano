@@ -151,9 +151,9 @@ class Trainer():
             backward_times.update(time.time() - forward_times.val)
             start = time.time()
 
-            for m in zip(self.metrics, metric_scores):
-                m[1].update(m[0].eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
-                curr_scores.update(m[1].val)
+            for metric, score in zip(self.metrics, metric_scores):
+                score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
+                curr_scores.update(score.val)
 
             if batch_idx == len(dataloader) - 1:
                 log = [
@@ -180,9 +180,9 @@ class Trainer():
                         writer.add_histogram('model/(train)' + tag, value.data.cpu().numpy(), epoch, bins='doane')
                         writer.add_histogram('model/(train)' + tag + '/grad', value.grad.data.cpu().numpy(), epoch, bins='doane')
 
-                for metric in metric_scores:
-                    log.append('metric/{name}: {metric.val:.5f} ({metric.avg:.5f})'.format(name=metric.__repr__(), metric=metric))
-                    writer.add_scalar('metric/{}'.format(metric.__repr__()), metric.avg, epoch)
+                for metric, score in zip(self.metrics, metric_scores):
+                    log.append('metric/{name}: {metric.val:.5f} ({metric.avg:.5f})'.format(name=metric.__repr__(), metric=score))
+                    writer.add_scalar('metric/{name}'.format(name = metric.__repr__()), score.avg, epoch)
                 log = "\n".join(log)
 
                 writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
