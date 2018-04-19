@@ -130,7 +130,6 @@ class Trainer():
         start = time.time()
         for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
             
-            epoch = epoch*len(dataloader) + batch_idx
             data_times.update(time.time() - start)
 
             input = cuda(Variable(input))
