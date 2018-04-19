@@ -67,8 +67,8 @@ def main(config):
     assert all(m in augmentations for m in MODE)
 
     datasets = {
-        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'train'), transform=augmentations['train'], target_transform=target_augmentations['train']),
-        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'val'), transform=augmentations['val'], target_transform=target_augmentations['val']),
+        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'train' and row['Target.Img'] != '-1'), transform=augmentations['train'], target_transform=target_augmentations['train']),
+        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'val' and row['Target.Img'] != '-1'), transform=augmentations['val'], target_transform=target_augmentations['val']),
         'test': None
     }
 

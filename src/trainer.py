@@ -100,8 +100,9 @@ class Trainer():
         self.best_score = 0
 
         for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-            self.train_once(epoch, dataloaders['train'], True, log_freq)
-            self.train_once(epoch, dataloaders['val'], False, log_freq)
+            checkpoint = (epoch % log_freq == 0)
+            self.train_once(epoch, dataloaders['train'], True, checkpoint)
+            self.train_once(epoch, dataloaders['val'], False, checkpoint)
             
             elasped_time = datetime.datetime.now() - start_time
             eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
@@ -112,7 +113,7 @@ class Trainer():
 
         slack_message('train ended', '#botlog')
 
-    def train_once(self, epoch, dataloader, train, log_freq):
+    def train_once(self, epoch, dataloader, train, checkpoint=True):
         
         losses = AverageMeter()
         forward_times = AverageMeter()
@@ -129,7 +130,7 @@ class Trainer():
         start = time.time()
         for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
             
-            niter = epoch*len(dataloader) + batch_idx
+            epoch = epoch*len(dataloader) + batch_idx
             data_times.update(time.time() - start)
 
             input = cuda(Variable(input))
@@ -154,7 +155,7 @@ class Trainer():
                 curr_score = curr_score + metric.add(output.data.cpu().numpy(), target.data.cpu().numpy())
                 curr_scores.update(curr_score)
 
-            if batch_idx % log_freq == 0:
+            if batch_idx == len(dataloader) - 1:
                 log = [
                     '[{}]'.format(state),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx, len(dataloader)),
@@ -164,10 +165,10 @@ class Trainer():
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses),
                 ]
 
-                writer.add_scalar('time/forward', forward_times.val, niter)
-                writer.add_scalar('time/backward', backward_times.val, niter)
-                writer.add_scalar('time/data', data_times.val, niter)
-                writer.add_scalar('loss', losses.val, niter)
+                writer.add_scalar('time/forward', forward_times.val, epoch)
+                writer.add_scalar('time/backward', backward_times.val, epoch)
+                writer.add_scalar('time/data', data_times.val, epoch)
+                writer.add_scalar('loss', losses.val, epoch)
 
                 if train:
                     lr = [group['lr'] for group in self.optimizer.param_groups][0]
@@ -176,20 +177,20 @@ class Trainer():
 
                     for tag, value in self.model.named_parameters():
                         tag = tag.replace('.', '/')
-                        writer.add_histogram('model/(train)' + tag, value.data.cpu().numpy(), niter, bins='doane')
-                        writer.add_histogram('model/(train)' + tag + '/grad', value.grad.data.cpu().numpy(), niter, bins='doane')
+                        writer.add_histogram('model/(train)' + tag, value.data.cpu().numpy(), epoch, bins='doane')
+                        writer.add_histogram('model/(train)' + tag + '/grad', value.grad.data.cpu().numpy(), epoch, bins='doane')
 
                 for metric in self.metrics:
                     log.append('metric/{}: {:.5f} ({:.5f})'.format(metric.__repr__(), metric.getRecentScore(), metric.mean()))
-                    writer.add_scalar('metric/{}'.format(metric.__repr__()), metric.getRecentScore(), niter)
+                    writer.add_scalar('metric/{}'.format(metric.__repr__()), metric.getRecentScore(), epoch)
                 log = "\n".join(log)
 
-                writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), niter)
-                writer.add_image('input/guideline', make_grid(input.data.cpu().narrow(1, 0, 1), normalize=True, scale_each=True), niter)
-                writer.add_image('target', make_grid(target.data.cpu(), normalize=True, scale_each=True), niter)
-                writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), niter)
+                writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+                writer.add_image('input/guideline', make_grid(input.data.cpu().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+                writer.add_image('target', make_grid(target.data.cpu(), normalize=True, scale_each=True), epoch)
+                writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
                 
-                writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), niter)
+                writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), epoch)
 
                 tqdm.write(log)
                 slack_message(log, '#botlog')
@@ -197,7 +198,8 @@ class Trainer():
                 is_best = self.best_score < curr_score
                 self.best_score = max(self.best_score, curr_score)
 
-                self.save_checkpoint(epoch, is_best)
+                if checkpoint:
+                    self.save_checkpoint(epoch, is_best)
                 
         if train: # smoothing effect to LR reduce on platue
             self.scheduler.step(losses.avg)

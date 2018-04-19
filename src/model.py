@@ -76,16 +76,16 @@ class UpBlock(nn.Module):
 class UNet(nn.Module):
     def __init__(self, channels, classes, bilinear=True):
         super(UNet, self).__init__()
-        self.in_conv = InBlock(channels, 8)
-        self.down1 = DownBlock(8, 16)
-        self.down2 = DownBlock(16, 32)
-        self.down3 = DownBlock(32, 64)
-        self.down4 = DownBlock(64, 64)
-        self.up1 = UpBlock(128, 32, bilinear)
-        self.up2 = UpBlock(64, 16, bilinear)
-        self.up3 = UpBlock(32, 8, bilinear)
-        self.up4 = UpBlock(16, 8, bilinear)
-        self.out_conv = OutBlock(8, classes)
+        self.in_conv = InBlock(channels, 16)
+        self.down1 = DownBlock(16, 32)
+        self.down2 = DownBlock(32, 64)
+        self.down3 = DownBlock(64, 128)
+        self.down4 = DownBlock(128, 128)
+        self.up1 = UpBlock(256, 64, bilinear)
+        self.up2 = UpBlock(128, 32, bilinear)
+        self.up3 = UpBlock(64, 16, bilinear)
+        self.up4 = UpBlock(32, 16, bilinear)
+        self.out_conv = OutBlock(16, classes)
 
     def forward(self, x):
         x1 = self.in_conv(x)
