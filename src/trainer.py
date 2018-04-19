@@ -78,7 +78,7 @@ class Trainer():
             writer.add_scalar('number of parameter', count_parameters(self.model))
             writer.add_text('info', 'this is start', 0)
 
-    def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq_ratio = 10):
+    def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
         
         slack_message('train started', '#botlog')
         # slack_message(self.model.__repr__, '#botlog')
@@ -100,8 +100,8 @@ class Trainer():
         self.best_score = 0
 
         for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-            self.train_once(epoch, dataloaders['train'], True, log_freq_ratio)
-            self.train_once(epoch, dataloaders['val'], False, log_freq_ratio)
+            self.train_once(epoch, dataloaders['train'], True, log_freq)
+            self.train_once(epoch, dataloaders['val'], False, log_freq)
             
             elasped_time = datetime.datetime.now() - start_time
             eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
@@ -112,7 +112,7 @@ class Trainer():
 
         slack_message('train ended', '#botlog')
 
-    def train_once(self, epoch, dataloader, train=True, log_freq_ratio = 10):
+    def train_once(self, epoch, dataloader, train, log_freq):
         
         losses = AverageMeter()
         forward_times = AverageMeter()
@@ -154,7 +154,7 @@ class Trainer():
                 curr_score = curr_score + metric.add(output.data.cpu().numpy(), target.data.cpu().numpy())
                 curr_scores.update(curr_score)
 
-            if batch_idx % log_freq_ratio == 0:
+            if batch_idx % log_freq == 0:
                 log = [
                     '[{}]'.format(state),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx, len(dataloader)),
@@ -192,8 +192,7 @@ class Trainer():
                 writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), niter)
 
                 tqdm.write(log)
-                # slack_message(log, '#botlog')
-
+                slack_message(log, '#botlog')
 
                 is_best = self.best_score < curr_score
                 self.best_score = max(self.best_score, curr_score)
@@ -209,7 +208,7 @@ class Trainer():
         pass
 
     def ensemble(self):
-        pass
+        pass        
 
     def save_checkpoint(self, epoch, is_best):
 

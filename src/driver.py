@@ -80,12 +80,14 @@ def main(config):
     metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8)]
 
     checkpoint = config_model["checkpoint"]
+    log_freq = config_training["log_freq"]
 
     trainer = Trainer(model, datasets, criterion, optimizer, scheduler, metrics, checkpoint)
 
     trainer.train(batch_size=config_training['batch_size'],
                   num_workers=config_training['num_workers'],
-                  epochs=config_training['epochs'])
+                  epochs=config_training['epochs'],
+                  log_freq=log_freq)
 
 if __name__ == "__main__":
     args = parser.parse_args()

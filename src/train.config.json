@@ -29,7 +29,8 @@
     "training": {
         "epochs": 20,
         "batch_size": 16,
-        "num_workers": 16
+        "num_workers": 16,
+        "log_freq": 20
     },
     "learning": {
         "weight_init": "He",
