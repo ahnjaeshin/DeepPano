@@ -5,20 +5,21 @@ import torch.nn.functional as F
 class IOULoss():
     """BCE - log(jaccard index)
     """
-    def __init__(self, weight=0):
-        self.nll = nn.BCEWithLogitsLoss()
-        self.weight = weight
-    
-    def __call__(self, output, target):
-        loss = self.nll(output, target)
+    def __init__(self, jaccard_weight=0):
+        self.nll_loss = nn.BCEWithLogitsLoss()
+        self.jaccard_weight = jaccard_weight
 
-        if self.weight != 0:
+    def __call__(self, outputs, targets):
+        loss = self.nll_loss(outputs, targets)
+
+        if self.jaccard_weight:
             eps = 1e-15
-            target = (target == 1).float()
-            output = F.sigmoid(output)
+            jaccard_target = (targets == 1).float()
+            jaccard_output = F.sigmoid(outputs)
 
-            intersection = (output * target).sum()
-            union = output.sum() + target.sum() - intersection
+            intersection = (jaccard_output * jaccard_target).sum()
+            union = jaccard_output.sum() + jaccard_target.sum()
 
-            loss -= self.weight * torch.log((intersection + eps) / (union + eps))
+            loss -= self.jaccard_weight * torch.log((intersection + eps) / (union - intersection + eps))
         return loss
+    
