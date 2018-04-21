@@ -136,7 +136,7 @@ class Trainer():
 
             input = cuda(Variable(input))
             target = cuda(Variable(target))
-            output = self.model(input)
+            output, embed = self.model(input)
             loss = self.criterion(output, target)
             output = F.sigmoid(output)
 
@@ -191,6 +191,8 @@ class Trainer():
                 writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
                 
                 writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), epoch)
+
+                writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
 
                 tqdm.write(log)
                 slack_message(log, '#botlog')

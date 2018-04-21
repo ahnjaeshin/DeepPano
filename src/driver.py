@@ -74,8 +74,8 @@ def main(config):
     }
 
     model = UNet(2, 1, bilinear=False)
-    # criterion = nn.BCEWithLogitsLoss()
-    criterion = IOULoss(weight=1)
+    criterion = nn.BCEWithLogitsLoss()
+    # criterion = IOULoss(jaccard_weight=1)
     optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 20, gamma=0.1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
