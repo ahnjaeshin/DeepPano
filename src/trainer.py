@@ -15,6 +15,7 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 from torch.autograd import Variable
@@ -35,6 +36,11 @@ def cuda(x, async=True):
     add async=True"""
     return x.cuda() if torch.cuda.is_available() else x
 
+def weights_init(m):
+    if isinstance(m, nn.Conv2d):
+        init.xavier_normal(m.weight)
+        m.bias.data.zero_()
+
 class Trainer(): 
     """trainer class
     1. able to train, test models
@@ -50,7 +56,7 @@ class Trainer():
         ensemble!!
     """
 
-    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, checkpoint=None):
+    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, checkpoint=None, init=True):
         
         self.model = model
         self.datasets = datasets
@@ -63,20 +69,21 @@ class Trainer():
         self.start_epoch = 0
         self.best_score = 0
 
+        if init:
+            self.model.apply(weights_init)
+
         if checkpoint:
             self.load(checkpoint)
 
         if not torch.cuda.is_available(): 
             print("CUDA is unavailable. It'll be very slow...")
         
-        self.trainWriter = SummaryWriter(comment="-train")
-        self.valWriter = SummaryWriter(comment="-val")
+        self.trainWriter = SummaryWriter(comment="/train")
+        self.valWriter = SummaryWriter(comment="/val")
         dummy_input = Variable(torch.rand(1, 2, 224, 224), requires_grad=True)
 
-        for writer in [self.trainWriter, self.valWriter]:
-            writer.add_graph(self.model, (dummy_input, ))
-            writer.add_scalar('number of parameter', count_parameters(self.model))
-            writer.add_text('info', 'this is start', 0)
+        self.trainWriter.add_graph(self.model, (dummy_input, ))
+        self.trainWriter.add_scalar('number of parameter', count_parameters(self.model))
 
     def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
         
@@ -113,6 +120,9 @@ class Trainer():
 
         slack_message('train ended', '#botlog')
 
+        self.trainWriter.close()
+        self.valWriter.close()
+
     def train_once(self, epoch, dataloader, train, checkpoint=True):
         
         losses = AverageMeter()
@@ -136,7 +146,7 @@ class Trainer():
 
             input = cuda(Variable(input))
             target = cuda(Variable(target))
-            output, embed = self.model(input)
+            output = self.model(input)
             loss = self.criterion(output, target)
             output = F.sigmoid(output)
 
@@ -155,7 +165,7 @@ class Trainer():
                 score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
                 curr_scores.update(score.val)
 
-            if batch_idx == len(dataloader) - 1:
+            if batch_idx == 0:
                 log = [
                     '[{}]'.format(state),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
@@ -192,7 +202,7 @@ class Trainer():
                 
                 writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), epoch)
 
-                writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
+                # writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
 
                 tqdm.write(log)
                 slack_message(log, '#botlog')
@@ -250,4 +260,3 @@ class Trainer():
         else:
             tqdm.write("=> no checkpoint found at '{}'".format(path))
             slack_message("=> no checkpoint found at '{}'".format(path))
-

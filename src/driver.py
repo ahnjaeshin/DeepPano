@@ -15,7 +15,7 @@ from model import UNet
 from preprocess import PanoSet
 from torchvision import transforms
 from trainer import Trainer
-from metric import IOU
+from metric import IOU, DICE
 from loss import IOULoss
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -79,7 +79,7 @@ def main(config):
     optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 20, gamma=0.1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-    metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8)]
+    metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8), DICE(threshold=0.3), DICE(threshold=0.5), DICE(threshold=0.8)]
 
     checkpoint = config_model["checkpoint"]
     log_freq = config_training["log_freq"]
