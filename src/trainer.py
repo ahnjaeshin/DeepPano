@@ -214,7 +214,7 @@ class Trainer():
                     self.save_checkpoint(epoch, is_best)
                 
         if train: # smoothing effect to LR reduce on platue
-            self.scheduler.step(losses.avg)
+            self.scheduler.step()
 
         # todo : for every batch, log hard examples
 

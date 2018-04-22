@@ -77,8 +77,8 @@ def main(config):
     criterion = nn.BCEWithLogitsLoss()
     # criterion = IOULoss(jaccard_weight=1)
     optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
-    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 20, gamma=0.1)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 130, gamma=0.1)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
     metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8), DICE(threshold=0.3), DICE(threshold=0.5), DICE(threshold=0.8)]
 
     checkpoint = config_model["checkpoint"]
