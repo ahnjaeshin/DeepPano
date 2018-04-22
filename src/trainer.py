@@ -150,7 +150,9 @@ class Trainer():
             loss = self.criterion(output, target)
             output = F.sigmoid(output)
 
-            losses.update(loss.cpu().data[0], input.cpu().size(0))
+            batch_size = input.cpu().size(0)
+
+            losses.update(loss.cpu().data[0], batch_size)
             forward_times.update(time.time() - data_times.val)
 
             if train : 
@@ -162,8 +164,8 @@ class Trainer():
             start = time.time()
 
             for metric, score in zip(self.metrics, metric_scores):
-                score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
-                curr_scores.update(score.val)
+                score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()), batch_size)
+                curr_scores.update(score.val, batch_size)
 
             if batch_idx == len(dataloader) - 1: 
                 log = [
