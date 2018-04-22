@@ -92,7 +92,7 @@ class Trainer():
 
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
-                                      shuffle = (x == 'train'), 
+                                      shuffle = True, 
                                       pin_memory=torch.cuda.is_available(), 
                                       num_workers=num_workers) 
                 for x in ['train', 'val']}
@@ -106,17 +106,20 @@ class Trainer():
         start_time = datetime.datetime.now()
         self.best_score = 0
 
-        for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-            checkpoint = (epoch % log_freq == 0)
-            self.train_once(epoch, dataloaders['train'], True, checkpoint)
-            self.train_once(epoch, dataloaders['val'], False, checkpoint)
-            
-            elasped_time = datetime.datetime.now() - start_time
-            eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
+        try:
+            for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
+                checkpoint = (epoch % log_freq == 0)
+                self.train_once(epoch, dataloaders['train'], True, checkpoint)
+                self.train_once(epoch, dataloaders['val'], False, checkpoint)
+                
+                elasped_time = datetime.datetime.now() - start_time
+                eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
 
-            log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
-            tqdm.write(log)
-            slack_message(log, '#botlog')
+                log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
+                tqdm.write(log)
+                slack_message(log, '#botlog')
+        except KeyboardInterrupt:
+            slack_message('abrupt end', '#botlog')
 
         slack_message('train ended', '#botlog')
 
@@ -207,12 +210,12 @@ class Trainer():
                 # writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
 
                 tqdm.write(log)
-                slack_message(log, '#botlog')
 
                 is_best = self.best_score < curr_scores.avg
                 self.best_score = max(self.best_score, curr_scores.avg)
 
                 if checkpoint:
+                    slack_message(log, '#botlog')
                     self.save_checkpoint(epoch, is_best)
                 
         if train: # smoothing effect to LR reduce on platue
