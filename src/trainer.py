@@ -165,7 +165,7 @@ class Trainer():
                 score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()))
                 curr_scores.update(score.val)
 
-            if batch_idx == 0:
+            if batch_idx == len(dataloader) - 1: 
                 log = [
                     '[{}]'.format(state),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
