@@ -38,12 +38,12 @@ def main(config):
         'train' : transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),         
-            transforms.Normalize(mean=(0,0), std=(255,255)),
+            # transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'val'  : transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),         
-            transforms.Normalize(mean=(0,0), std=(255,255)),
+            # transforms.Normalize(mean=(0,0), std=(255,255)),
         ]),
         'test' : None
     }

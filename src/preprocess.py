@@ -82,6 +82,7 @@ class PanoSet(Dataset):
             img = self.transform(img)
         if self.target_transform is not None and doTransform:
             target = self.target_transform(target)
+        assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
         
         return (img, target, filepath, index)
 

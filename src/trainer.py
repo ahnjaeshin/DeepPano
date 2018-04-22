@@ -93,7 +93,7 @@ class Trainer():
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
                                       shuffle = (x == 'train'), 
-                                      pin_memory=True, 
+                                      pin_memory=torch.cuda.is_available(), 
                                       num_workers=num_workers) 
                 for x in ['train', 'val']}
 
@@ -141,7 +141,7 @@ class Trainer():
 
         start = time.time()
         for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
-            
+            assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
             data_times.update(time.time() - start)
 
             input = cuda(Variable(input))
