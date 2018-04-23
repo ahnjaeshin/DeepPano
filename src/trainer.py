@@ -193,12 +193,14 @@ class Trainer():
                     'Backward Time {time.val:.3f} ({time.avg:.3f})'.format(time=backward_times),
                     'Data {time.val:.3f} ({time.avg:.3f})'.format(time=data_times),
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses),
+                    'Loss_acc {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses2),
                 ]
 
                 writer.add_scalar('time/forward', forward_times.avg, epoch)
                 writer.add_scalar('time/backward', backward_times.avg, epoch)
                 writer.add_scalar('time/data', data_times.avg, epoch)
-                writer.add_scalar('loss', losses.avg, epoch)
+                writer.add_scalar('loss/iou', losses.avg, epoch)
+                writer.add_scalar('loss/acc', losses2.avg, epoch)
 
                 if train:
                     lr = [group['lr'] for group in self.optimizer.param_groups][0]
