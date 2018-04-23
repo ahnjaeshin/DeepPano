@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.optim as optim
-from tensorboardX import SummaryWriter
+
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -26,7 +26,7 @@ from torchvision.utils import make_grid
 from torchvision import datasets
 from torch.autograd import Variable
 
-from utils import slack_message, count_parameters, AverageMeter
+from utils import slack_message, AverageMeter
 from torch.nn import functional as F
 import shutil
 
@@ -65,7 +65,7 @@ class Trainer():
         ensemble!!
     """
 
-    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, checkpoint=None, init=None):
+    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, writers, checkpoint=None, init=None):
         
         self.model = model
         self.datasets = datasets
@@ -74,6 +74,7 @@ class Trainer():
         self.scheduler = scheduler
         self.metrics = metrics
         self.checkpoint = checkpoint
+        self.writers = writers
 
         self.start_epoch = 0
         self.best_score = 0
@@ -88,13 +89,6 @@ class Trainer():
         if not torch.cuda.is_available(): 
             print("CUDA is unavailable. It'll be very slow...")
         
-        self.trainWriter = SummaryWriter(comment="/train")
-        self.valWriter = SummaryWriter(comment="/val")
-        dummy_input = Variable(torch.rand(1, 2, 128, 128), requires_grad=True)
-
-        self.trainWriter.add_graph(self.model, (dummy_input, ))
-        self.trainWriter.add_scalar('number of parameter', count_parameters(self.model))
-
     def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
         
         slack_message('train started', '#botlog')
@@ -116,28 +110,23 @@ class Trainer():
         start_time = datetime.datetime.now()
         self.best_score = 0
 
-        try:
-            for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-                checkpoint = (epoch % log_freq == 0)
-                self.train_once(epoch, dataloaders['train'], True, checkpoint)
-                self.train_once(epoch, dataloaders['val'], False, checkpoint)
-                
-                elasped_time = datetime.datetime.now() - start_time
-                eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
+        for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
+            checkpoint = (epoch % log_freq == 0)
 
-                log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
-                tqdm.write(log)
-                if checkpoint:
-                    slack_message(log, '#botlog')
-        except KeyboardInterrupt:
-            slack_message('abrupt end', '#botlog')
+            for state in ('train', 'val'):
+                self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], checkpoint)
+            
+            elasped_time = datetime.datetime.now() - start_time
+            eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
+
+            log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
+            tqdm.write(log)
+            if checkpoint:
+                slack_message(log, '#botlog')
 
         slack_message('train ended', '#botlog')
 
-        self.trainWriter.close()
-        self.valWriter.close()
-
-    def train_once(self, epoch, dataloader, train, checkpoint=True):
+    def train_once(self, epoch, dataloader, train, writer, checkpoint=True):
         
         losses = AverageMeter()
         forward_times = AverageMeter()
@@ -150,8 +139,6 @@ class Trainer():
         best_score = 0
 
         self.model.train(train)
-        state = 'train' if train else 'val'
-        writer = self.trainWriter if train else self.valWriter
 
         start = time.time()
         for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
@@ -183,7 +170,7 @@ class Trainer():
 
             if batch_idx == len(dataloader) - 1: 
                 log = [
-                    '[{}]'.format(state),
+                    '[{}]'.format('train' if train else 'val'),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
                     'Forward Time {time.val:.3f} ({time.avg:.3f})'.format(time=forward_times),
                     'Backward Time {time.val:.3f} ({time.avg:.3f})'.format(time=backward_times),

@@ -1,7 +1,6 @@
 
 import random
 import numpy as np
-import math
 
 class DualAugment:
     def __init__(self, transforms):
