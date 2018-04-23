@@ -104,6 +104,7 @@ class UNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         x = self.out_conv(x)
+
         if self.dropout:
             x = self.dropout2(x)
-        return x
+        return x, torch.mean(x5.view(x5.size()[0], -1), dim=1)

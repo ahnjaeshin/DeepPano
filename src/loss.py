@@ -40,7 +40,7 @@ class BCEIOULoss():
             union = union - intersection + eps
             intersection = intersection + eps
 
-            IOU = 1 - torch.mean(torch.div(intersection, union))
+            IOU = 1 - torch.mean(torch.div(intersection, union), axis=0)
 
             loss = (1-self.jaccard_weight) * loss + self.jaccard_weight * IOU
 

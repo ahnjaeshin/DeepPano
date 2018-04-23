@@ -29,6 +29,7 @@ from torch.autograd import Variable
 from utils import slack_message, AverageMeter
 from torch.nn import functional as F
 import shutil
+from metric import Accuracy
 
 
 def cuda(x, async=True):
@@ -80,6 +81,9 @@ class Trainer():
         self.best_score = 0
         self.init = Init(init)
 
+        self.criterion2 = nn.BCEWithLogitsLoss()
+        self.acc = Accuracy(0.5)
+
         if init:
             self.model.apply(self.init)
 
@@ -129,12 +133,14 @@ class Trainer():
     def train_once(self, epoch, dataloader, train, writer, checkpoint=True):
         
         losses = AverageMeter()
+        losses2 = AverageMeter()
         forward_times = AverageMeter()
         backward_times = AverageMeter()
         data_times = AverageMeter()
         curr_scores = AverageMeter()
         
         metric_scores = [AverageMeter() for metric in self.metrics]
+        acc_score = AverageMeter()
 
         best_score = 0
 
@@ -145,20 +151,29 @@ class Trainer():
             assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
             data_times.update(time.time() - start)
 
+            batch_size = input.size(0)
+
+            t = target.view(batch_size, -1)
+            t = t.sum(dim=1)
+            target2 = (t == 0).float()
+
             input = cuda(Variable(input))
             target = cuda(Variable(target))
-            output = self.model(input)
+            target2 = cuda(Variable(target2))
+            output, output2 = self.model(input)
             loss = self.criterion(output, target)
+            loss2 = self.criterion2(output2, target2)
             output = F.sigmoid(output)
-
-            batch_size = input.cpu().size(0)
+            output2 = F.sigmoid(output2)            
 
             losses.update(loss.cpu().data[0], batch_size)
+            losses2.update(loss2.cpu().data[0], batch_size)
             forward_times.update(time.time() - data_times.val)
 
             if train : 
                 self.optimizer.zero_grad()            
-                loss.backward()
+                loss.backward(retain_graph=True)
+                loss2.backward()
                 self.optimizer.step()
                 
             backward_times.update(time.time() - forward_times.val)
@@ -167,6 +182,8 @@ class Trainer():
             for metric, score in zip(self.metrics, metric_scores):
                 score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()), batch_size)
                 curr_scores.update(score.val, batch_size)
+
+            acc_score.update(self.acc.eval(output2.data.cpu().numpy(), target2.data.cpu().numpy()), batch_size)
 
             if batch_idx == len(dataloader) - 1: 
                 log = [
@@ -196,6 +213,8 @@ class Trainer():
                 for metric, score in zip(self.metrics, metric_scores):
                     log.append('metric/{name}: {metric.val:.5f} ({metric.avg:.5f})'.format(name=metric.__repr__(), metric=score))
                     writer.add_scalar('metric/{name}'.format(name = metric.__repr__()), score.avg, epoch)
+                log.append('acc: {acc.avg}'.format(acc=acc_score))
+                writer.add_scalar('metric/accuracy', acc_score.avg, epoch)
                 log = "\n".join(log)
 
                 writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
