@@ -35,8 +35,9 @@ class Filter():
         lookup = {
             "train" : lambda row: row['Train.Val'] == 'train',
             "val" : lambda row: row['Train.Val'] == 'val',
+            "all": lambda row: int(row['Segmentable.Type']) <= 10,
             "segmentable": lambda row: int(row['Segmentable.Type']) < 10,
-            "unsegmentable": lambda row: int(row['Segmentable.Type']) >= 10,
+            "unsegmentable": lambda row: int(row['Segmentable.Type']) == 10,
             "front-teeth": lambda row: int(row['Tooth.Num.Annot']) in FRONT,
         }
         self.func = [lambda row: row['Target.Img'] != '-1']
@@ -67,6 +68,9 @@ def main(config):
                                                            trial=config_logging_trial)
     writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
     
+    # need better way
+    slack_message(json.dumps(config), config_logging_channel)
+
     ##################
     #  augmentation  #
     ##################
