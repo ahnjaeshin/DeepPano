@@ -15,8 +15,9 @@ from model import UNet
 from preprocess import PanoSet
 from torchvision import transforms
 from trainer import Trainer
+from transform import DualAugment, ToBoth, ImageOnly, TargetOnly
 import metric
-from loss import IOULoss, DICELoss, BCEIOULoss
+import loss
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
@@ -51,36 +52,22 @@ def main(config):
     ##################
     config_augmentation = config["augmentation"]
 
-
     augmentations = {
-        'train' : transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),         
-            # transforms.Normalize(mean=(0,0), std=(255,255)),
-        ]),
-        'val'  : transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),         
-            # transforms.Normalize(mean=(0,0), std=(255,255)),
-        ])
-    }
+        'train' : DualAugment([
+            ToBoth(transforms.RandomHorizontalFlip()),
+            ToBoth(transforms.RandomVerticalFlip()),
 
-    target_augmentations = {
-        'train' : transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 )),
-            transforms.ToTensor(),         
-            # transforms.Normalize(mean=(0,), std=(1,)),
+            ToBoth(transforms.Resize((224, 224))),
+            TargetOnly(transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 ))),
+            ToBoth(transforms.ToTensor()), 
             
         ]),
-        'val'  : transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 )),
-            transforms.ToTensor(),      
-            # transforms.Normalize(mean=(0,0), std=(255,255)),
+        'val' : DualAugment([
+            ToBoth(transforms.Resize((224, 224))),
+            TargetOnly(transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 ))),
+            ToBoth(transforms.ToTensor()),
         ])
     }
-
 
     ##################
     #     dataset    #
@@ -88,13 +75,13 @@ def main(config):
     config_dataset = config["dataset"]
     config_dataset_path = config_dataset["data-dir"]
 
-    train_filter = Filter(['train'])
-    val_filter = Filter(['val'])
-
-    datasets = {
-        'train': PanoSet(config_dataset_path, train_filter, transform=augmentations['train'], target_transform=target_augmentations['train']),
-        'val': PanoSet(config_dataset_path, val_filter, transform=augmentations['val'], target_transform=target_augmentations['val']),
+    data_filter = {
+        'train' : Filter(['train']),
+        'val'   : Filter(['val']),
     }
+
+    datasets = {x: PanoSet(config_dataset_path, data_filter[x], transform=augmentations[x])
+                    for x in ['train', 'val']}
 
 
     ##################
@@ -108,16 +95,25 @@ def main(config):
     #   evaluation   #
     ##################
     config_evaluation = config["evaluation"]
+    # IOU, DICE, F1
     config_metrics = config_evaluation["metrics"]
+    # BCE, IOU, DICE, BCEIOU
     config_loss = config_evaluation["loss"]
 
     metric_lookup = {"IOU": metric.IOU, "DICE": metric.DICE}
     metrics = [metric_lookup[m["type"]](m["threshold"]) for m in config_metrics]
 
-    # criterion = nn.BCEWithLogitsLoss()
-    # criterion = IOULoss()
-    # criterion = DICELoss()
-    criterion = BCEIOULoss(jaccard_weight=1)
+    if config_loss["type"] == "BCE":
+        criterion = nn.BCEWithLogitsLoss()
+    elif config_loss["type"] == "IOU":
+        criterion = loss.IOULoss()
+    elif config_loss["type"] == "DICE":
+        criterion = loss.DICELoss()
+    elif config_loss["type"] == "BCEIOU":
+        loss_param = config_loss["param"]
+        criterion = loss.BCEIOULoss(jaccard_weight=loss_param["weight"])
+    else:
+        raise NotImplementedError
 
     ##################
     #    learning    #

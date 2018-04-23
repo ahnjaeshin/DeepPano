@@ -41,7 +41,7 @@ class PanoSet(Dataset):
     
     """
 
-    def __init__(self, meta_data_path, filter_func, transform = None, target_transform = None):
+    def __init__(self, meta_data_path, filter_func, transform = None):
         
         self.path = meta_data_path
         df = pd.read_csv(self.path)
@@ -59,7 +59,6 @@ class PanoSet(Dataset):
         self.data = data
         self.meta_data = df
         self.transform = transform
-        self.target_transform = target_transform
 
     def __getitem__(self, index, doTransform=True):
         """
@@ -79,9 +78,7 @@ class PanoSet(Dataset):
         filepath = patch.input_path
 
         if self.transform is not None and doTransform:
-            img = self.transform(img)
-        if self.target_transform is not None and doTransform:
-            target = self.target_transform(target)
+            img, target = self.transform(img, target)
         assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
         
         return (img, target, filepath, index)

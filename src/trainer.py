@@ -90,7 +90,7 @@ class Trainer():
         
         self.trainWriter = SummaryWriter(comment="/train")
         self.valWriter = SummaryWriter(comment="/val")
-        dummy_input = Variable(torch.rand(1, 2, 224, 224), requires_grad=True)
+        dummy_input = Variable(torch.rand(1, 2, 128, 128), requires_grad=True)
 
         self.trainWriter.add_graph(self.model, (dummy_input, ))
         self.trainWriter.add_scalar('number of parameter', count_parameters(self.model))
