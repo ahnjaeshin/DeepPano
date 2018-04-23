@@ -36,10 +36,19 @@ def cuda(x, async=True):
     add async=True"""
     return x.cuda() if torch.cuda.is_available() else x
 
-def weights_init(m):
-    if isinstance(m, nn.Conv2d):
-        init.xavier_normal(m.weight)
-        m.bias.data.zero_()
+class Init():
+    def __init__(self, init="xavier_normal"):
+        self.init = init
+    
+    def __call__(self, m):
+        if isinstance(m, nn.Conv2d):
+            if self.init is "xavier_normal":
+                init.xavier_normal(m.weight)
+            elif self.init is "he_uniform":
+                init.kaiming_uniform(m.weight)
+            elif self.init is "he_normal":
+                init.kaiming_normal(m.weight)
+            m.bias.data.zero_()
 
 class Trainer(): 
     """trainer class
@@ -56,7 +65,7 @@ class Trainer():
         ensemble!!
     """
 
-    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, checkpoint=None, init=True):
+    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, checkpoint=None, init=None):
         
         self.model = model
         self.datasets = datasets
@@ -68,9 +77,10 @@ class Trainer():
 
         self.start_epoch = 0
         self.best_score = 0
+        self.init = Init(init)
 
         if init:
-            self.model.apply(weights_init)
+            self.model.apply(self.init)
 
         if checkpoint:
             self.load(checkpoint)
@@ -117,7 +127,8 @@ class Trainer():
 
                 log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
                 tqdm.write(log)
-                slack_message(log, '#botlog')
+                if checkpoint:
+                    slack_message(log, '#botlog')
         except KeyboardInterrupt:
             slack_message('abrupt end', '#botlog')
 

@@ -11,6 +11,7 @@ class BCEIOULoss():
     """BCE - log(jaccard index)
     """
     def __init__(self, jaccard_weight=0):
+        assert jaccard_weight >= 0 and jaccard_weight <= 1
         self.nll_loss = nn.BCEWithLogitsLoss()
         self.jaccard_weight = jaccard_weight
 

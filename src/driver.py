@@ -15,24 +15,42 @@ from model import UNet
 from preprocess import PanoSet
 from torchvision import transforms
 from trainer import Trainer
-from metric import IOU, DICE
+import metric
 from loss import IOULoss, DICELoss, BCEIOULoss
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
 
-MODE = ('train', 'val', 'test')
+class Filter():
+    
+    def __init__(self, filters):
+        lookup = {
+            "train" : lambda row: row['Train.Val'] == 'train',
+            "val" : lambda row: row['Train.Val'] == 'val',
+        }
+        self.func = [lambda row: row['Target.Img'] != '-1']
+        self.func += [lookup[f] for f in filters]
+
+    def __call__(self, row):
+        for f in self.func:
+            if not f(row):
+                return False
+        return True
+
+
 
 def main(config):
-    config_dataset = config["dataset"]
-    assert 'data-dir' in config_dataset
     
-    config_augmentation = config["augmentation"]
-    config_model = config["model"]
-    config_training = config["training"]
-    config_learning = config["learning"]
-    config_evaluation = config["evaluation"]
+    ##################
+    #     logging    #
+    ##################
     config_logging = config["logging"]
+    
+    ##################
+    #  augmentation  #
+    ##################
+    config_augmentation = config["augmentation"]
+
 
     augmentations = {
         'train' : transforms.Compose([
@@ -44,8 +62,7 @@ def main(config):
             transforms.Resize((224, 224)),
             transforms.ToTensor(),         
             # transforms.Normalize(mean=(0,0), std=(255,255)),
-        ]),
-        'test' : None
+        ])
     }
 
     target_augmentations = {
@@ -61,37 +78,86 @@ def main(config):
             transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 )),
             transforms.ToTensor(),      
             # transforms.Normalize(mean=(0,0), std=(255,255)),
-        ]),
-        'test' : None,
+        ])
     }
 
-    assert all(m in augmentations for m in MODE)
+
+    ##################
+    #     dataset    #
+    ##################
+    config_dataset = config["dataset"]
+    config_dataset_path = config_dataset["data-dir"]
+
+    train_filter = Filter(['train'])
+    val_filter = Filter(['val'])
 
     datasets = {
-        'train': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'train' and row['Target.Img'] != '-1'), transform=augmentations['train'], target_transform=target_augmentations['train']),
-        'val': PanoSet(config_dataset['data-dir'], (lambda row: row['Train.Val'] == 'val' and row['Target.Img'] != '-1'), transform=augmentations['val'], target_transform=target_augmentations['val']),
-        'test': None
+        'train': PanoSet(config_dataset_path, train_filter, transform=augmentations['train'], target_transform=target_augmentations['train']),
+        'val': PanoSet(config_dataset_path, val_filter, transform=augmentations['val'], target_transform=target_augmentations['val']),
     }
 
+
+    ##################
+    #      model     #
+    ##################
+    config_model = config["model"]
+
     model = UNet(2, 1, bilinear=False)
+
+    ##################
+    #   evaluation   #
+    ##################
+    config_evaluation = config["evaluation"]
+    config_metrics = config_evaluation["metrics"]
+    config_loss = config_evaluation["loss"]
+
+    metric_lookup = {"IOU": metric.IOU, "DICE": metric.DICE}
+    metrics = [metric_lookup[m["type"]](m["threshold"]) for m in config_metrics]
+
     # criterion = nn.BCEWithLogitsLoss()
     # criterion = IOULoss()
     # criterion = DICELoss()
     criterion = BCEIOULoss(jaccard_weight=1)
+
+    ##################
+    #    learning    #
+    ##################
+    config_learning = config["learning"]
+    
+    # xavier_uniform, xavier_normal, he_uniform, he_normal
+    config_learning_weightinit = config_learning["weight_init"]
+    # give path to load checkpoint or null
+    config_learning_checkpoint = config_model["checkpoint"]
+
     optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 130, gamma=0.1)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-    metrics = [IOU(threshold=0.5), IOU(threshold=0.3), IOU(threshold=0.8), DICE(threshold=0.3), DICE(threshold=0.5), DICE(threshold=0.8)]
+    
+    trainer = Trainer(model=model, 
+                      datasets=datasets, 
+                      criterion=criterion, 
+                      optimizer=optimizer, 
+                      scheduler=scheduler, 
+                      metrics=metrics, 
+                      checkpoint=config_learning_checkpoint,
+                      init=config_learning_weightinit)
 
-    checkpoint = config_model["checkpoint"]
-    log_freq = config_training["log_freq"]
 
-    trainer = Trainer(model, datasets, criterion, optimizer, scheduler, metrics, checkpoint)
+    ##################
+    #    training    #
+    ##################
+    config_training = config["training"]
+    # print out log every log_feq #
+    config_learning_logfreq = config_training["log_freq"]
+    # batch size
+    config_learning_batchsize = config_training['batch_size']
+    config_learning_numworker = config_training['num_workers']
+    config_learning_epoch = config_training['epochs']
 
-    trainer.train(batch_size=config_training['batch_size'],
-                  num_workers=config_training['num_workers'],
-                  epochs=config_training['epochs'],
-                  log_freq=log_freq)
+    trainer.train(batch_size=config_learning_batchsize,
+                  num_workers=config_learning_numworker,
+                  epochs=config_learning_epoch,
+                  log_freq=config_learning_logfreq)
 
 if __name__ == "__main__":
     args = parser.parse_args()
