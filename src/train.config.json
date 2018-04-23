@@ -1,24 +1,27 @@
 {
-    "dataset": {
-        "data-dir": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/data/metadata/FirstSet-20180415182244-2-smallset.csv"
+    "logging": {
+        "slack_channel": "#botlog",
+        "debug": true,
+        "trial": 1
     },
     "augmentation": {
         "train": {
+            "size": 224,
             "input": [],
             "guideline": [],
             "target": [],
             "both": []
         },
-        "val": {},
-        "test": {
-            "input": [],
-            "target": []
+        "val": {
+            "size": 224
         }
+    },
+    "dataset": {
+        "data-dir": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/data/metadata/FirstSet-20180415182244-2-smallset.csv"
     },
     "model": {
         "use_dropout": true,
-        "name": "example1",
-        "trial": 1,
+        "type": "example1",
         "checkpoint": null,
         "config": {
             "type": null,
@@ -26,14 +29,40 @@
             "output_channel": 1
         }
     },
-    "training": {
-        "epochs": 20,
-        "batch_size": 16,
-        "num_workers": 16,
-        "log_freq": 20
+    "evaluation": {
+        "loss": {
+            "type": "BCE",
+            "param": {}
+        },
+        "metrics": [
+            {
+                "type": "IOU",
+                "threshold": 0.3
+            },
+            {
+                "type": "IOU",
+                "threshold": 0.5
+            },
+            {
+                "type": "IOU",
+                "threshold": 0.8
+            },
+            {
+                "type": "DICE",
+                "threshold": 0.3
+            },
+            {
+                "type": "DICE",
+                "threshold": 0.5
+            },
+            {
+                "type": "DICE",
+                "threshold": 0.8
+            }
+        ]
     },
     "learning": {
-        "weight_init": "He",
+        "weight_init": "he_uniform",
         "hard_example_mining": false,
         "lr_init": 1,
         "lr_schedule": {
@@ -48,15 +77,10 @@
         },
         "emsemble": true
     },
-    "evaluation": {
-        "loss": "cross_entropy",
-        "metrics": [
-            "accuracy",
-            "IoU"
-        ]
-    },
-    "logging": {
-        "slack_channel": "#botlog",
-        "debug": true
+    "training": {
+        "epochs": 2,
+        "batch_size": 5,
+        "num_workers": 16,
+        "log_freq": 20
     }
 }
