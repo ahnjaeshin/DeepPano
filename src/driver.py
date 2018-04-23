@@ -16,7 +16,7 @@ from preprocess import PanoSet
 from torchvision import transforms
 from trainer import Trainer
 from metric import IOU, DICE
-from loss import IOULoss, DICELoss
+from loss import IOULoss, DICELoss, BCEIOULoss
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
@@ -76,7 +76,8 @@ def main(config):
     model = UNet(2, 1, bilinear=False)
     # criterion = nn.BCEWithLogitsLoss()
     # criterion = IOULoss()
-    criterion = DICELoss()
+    # criterion = DICELoss()
+    criterion = BCEIOULoss(jaccard_weight=1)
     optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 130, gamma=0.1)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)

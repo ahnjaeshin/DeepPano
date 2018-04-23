@@ -14,26 +14,41 @@ class BCEIOULoss():
         self.nll_loss = nn.BCEWithLogitsLoss()
         self.jaccard_weight = jaccard_weight
 
-    def __call__(self, outputs, targets):
-        loss = self.nll_loss(outputs, targets)
+    def __call__(self, output, target):
+        loss = self.nll_loss(output, target)
 
         if self.jaccard_weight:
+            batch_size = output.size()[0]
+
+            output = F.sigmoid(output)
+            target = (target == 1).float()
+            assert output.size()[0] == target.size()[0]
+            output = output.view(batch_size, -1)
+            target = target.view(batch_size, -1)
+
+            assert output.size()[1] == target.size()[1]
+            assert (output <= 1).all() and (output >= 0).all()
+
             eps = 1e-15
-            jaccard_target = (targets == 1).float()
-            jaccard_output = F.sigmoid(outputs)
 
-            intersection = (jaccard_output * jaccard_target).sum()
-            union = jaccard_output.sum() + jaccard_target.sum()
+            intersection = (output * target).sum(dim=-1)
+            union = output.sum(dim=-1) + target.sum(dim=-1)
 
-            loss -= self.jaccard_weight * torch.log((intersection + eps) / (union - intersection + eps))
+            assert union.size()[0] == batch_size and intersection.size()[0] == batch_size
+
+            union = union - intersection + eps
+            intersection = intersection + eps
+
+            IOU = 1 - torch.mean(torch.div(intersection, union))
+
+            loss = (1-self.jaccard_weight) * loss + self.jaccard_weight * IOU
+
+            # loss -= self.jaccard_weight * torch.log((intersection + eps) / (union - intersection + eps))
         return loss
     
 class IOULoss():
     """1 - jaccard index
     """
-    def __init__(self, jaccard_weight=0):
-        self.nll_loss = nn.BCEWithLogitsLoss()
-        self.jaccard_weight = jaccard_weight
 
     def __call__(self, output, target):
         batch_size = output.size()[0]
@@ -62,9 +77,6 @@ class IOULoss():
 class DICELoss():
     """1 - jaccard index
     """
-    def __init__(self, jaccard_weight=0):
-        self.nll_loss = nn.BCEWithLogitsLoss()
-        self.jaccard_weight = jaccard_weight
 
     def __call__(self, output, target):
         batch_size = output.size()[0]
