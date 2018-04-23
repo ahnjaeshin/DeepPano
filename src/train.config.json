@@ -2,6 +2,8 @@
     "logging": {
         "slack_channel": "#botlog",
         "debug": true,
+        "title": "test",
+        "description": "for validation",
         "trial": 1
     },
     "augmentation": {
@@ -17,22 +19,27 @@
         }
     },
     "dataset": {
-        "data-dir": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/data/metadata/FirstSet-20180415182244-2-smallset.csv"
+        "data-dir": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/data/metadata/FirstSet-20180415182244-2-smallset.csv",
+        "filter": {
+            "train": ["train"],
+            "val": ["val"]
+        }
     },
     "model": {
-        "use_dropout": true,
-        "type": "example1",
-        "checkpoint": null,
+        "type": "UNET",
         "config": {
             "type": null,
             "input_channel": 2,
-            "output_channel": 1
+            "output_channel": 1,
+            "use_dropout": true
         }
     },
     "evaluation": {
         "loss": {
-            "type": "BCE",
-            "param": {}
+            "type": "DICE",
+            "param": {
+                "weight": 0.3
+            }
         },
         "metrics": [
             {
@@ -62,6 +69,7 @@
         ]
     },
     "learning": {
+        "checkpoint": null,
         "weight_init": "he_uniform",
         "hard_example_mining": false,
         "lr_init": 1,
@@ -78,8 +86,8 @@
         "emsemble": true
     },
     "training": {
-        "epochs": 2,
-        "batch_size": 5,
+        "epochs": 5,
+        "batch_size": 10,
         "num_workers": 16,
         "log_freq": 20
     }

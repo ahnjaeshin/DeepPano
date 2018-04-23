@@ -111,7 +111,7 @@ class Trainer():
         self.best_score = 0
 
         for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-            checkpoint = (epoch % log_freq == 0)
+            checkpoint = ((epoch + 1) % log_freq == 0)
 
             for state in ('train', 'val'):
                 self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], checkpoint)
@@ -119,7 +119,7 @@ class Trainer():
             elasped_time = datetime.datetime.now() - start_time
             eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
 
-            log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch, epochs, elasped_time, eta)
+            log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
             tqdm.write(log)
             if checkpoint:
                 slack_message(log, '#botlog')

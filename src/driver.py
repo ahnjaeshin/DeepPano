@@ -76,7 +76,7 @@ def main(config):
         'train' : DualAugment([
             ToBoth(transforms.RandomHorizontalFlip()),
             ToBoth(transforms.RandomVerticalFlip()),
-
+            ToBoth(transforms.RandomRotation(180)),
             ToBoth(transforms.Resize((224, 224))),
             TargetOnly(transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 ))),
             ToBoth(transforms.ToTensor()), 
