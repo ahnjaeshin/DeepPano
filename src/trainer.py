@@ -125,8 +125,7 @@ class Trainer():
 
             log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
             tqdm.write(log)
-            if checkpoint:
-                slack_message(log, '#botlog')
+            slack_message(log, '#botlog')
 
         slack_message('train ended', '#botlog')
 
@@ -155,7 +154,7 @@ class Trainer():
 
             t = target.view(batch_size, -1)
             t = t.sum(dim=1)
-            target2 = (t == 0).float()
+            target2 = (t == 0).float() # 1 is unsegmentable
 
             input = cuda(Variable(input))
             target = cuda(Variable(target))
@@ -164,7 +163,11 @@ class Trainer():
             loss = self.criterion(output, target)
             loss2 = self.criterion2(output2, target2)
             output = F.sigmoid(output)
-            output2 = F.sigmoid(output2)            
+            output2 = F.sigmoid(output2)
+
+            output2 = (output2 <= 0.5).float()
+            # print(output.size(), output2.size())
+            output = output * output2.view(batch_size, 1, 1, 1)          
 
             losses.update(loss.cpu().data[0], batch_size)
             losses2.update(loss2.cpu().data[0], batch_size)
@@ -224,7 +227,8 @@ class Trainer():
                 writer.add_image('target', make_grid(target.data.cpu(), normalize=True, scale_each=True), epoch)
                 writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
                 
-                writer.add_pr_curve('accuracy', target.data.cpu(), output.data.cpu(), epoch)
+                writer.add_pr_curve('accuracy/iou', target.data.cpu(), output.data.cpu(), epoch)
+                writer.add_pr_curve('accuracy/acc', target2.data.cpu(), output2.data.cpu(), epoch)
 
                 # writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
 
