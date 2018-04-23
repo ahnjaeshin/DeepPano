@@ -146,7 +146,25 @@ def main(config):
     # give path to load checkpoint or null
     config_learning_checkpoint = config_learning["checkpoint"]
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=config_learning['lr_init'], momentum=0.9, nesterov=True, weight_decay=1e-4)
+    # SGD
+    config_optimizer = config_learning["optimizer"]
+    config_learning_lrinit = config_learning["lr_init"]
+
+    # default : 0.9, False, 1-e4
+    if config_optimizer["type"] == "SGD":
+        optim_param = config_optimizer["param"]
+        optimizer = torch.optim.SGD(model.parameters(), 
+                                    lr=config_learning_lrinit, 
+                                    momentum=optim_param["momentum"],
+                                    nesterov=optim_param["nestrov"],
+                                    weight_decay=optim_param["weight_decay"])
+
+    if config_optimizer["type"] == "ADAM":
+        optim_param = config_optimizer["param"]
+        optimizer = torch.optim.SGD(model.parameters(), 
+                                    lr=config_learning_lrinit, 
+                                    weight_decay=optim_param["weight_decay"])
+
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 130, gamma=0.1)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
     

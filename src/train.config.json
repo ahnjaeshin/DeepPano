@@ -78,9 +78,11 @@
             "param": {}
         },
         "optimizer": {
-            "type": "SGD",
+            "type": "ADAM",
             "param": {
-                "nestrov": true
+                "momentum": 0.9,
+                "nestrov": true,
+                "weight_decay": 0
             }
         },
         "emsemble": true
