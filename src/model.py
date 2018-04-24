@@ -2,8 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def conv3(in_channel, out_channel):
+def conv_3(in_channel, out_channel):
     return nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1)
+
+def conv_1(in_channel, out_channel):
+    return nn.Conv2d(in_channel, out_channel, kernel_size=1)
 
 class ConvBlock(nn.Module):
     """
@@ -11,10 +14,10 @@ class ConvBlock(nn.Module):
     """
     def __init__(self, in_channel, out_channel):
         super(ConvBlock, self).__init__()
-        self.conv1 = conv3(in_channel, out_channel)
+        self.conv1 = conv_3(in_channel, out_channel)
         self.bn1 = nn.BatchNorm2d(out_channel)
         self.elu1 = nn.ELU(inplace=True)
-        self.conv2 = conv3(out_channel, out_channel)
+        self.conv2 = conv_3(out_channel, out_channel)
         self.bn2 = nn.BatchNorm2d(out_channel)
         self.elu2 = nn.ELU(inplace=True)
 
@@ -44,6 +47,27 @@ class OutBlock(nn.Module):
     def forward(self, x):
         x = self.layer(x)
         return x
+
+class BranchBlock(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super(BranchBlock, self).__init__()
+        self.conv1 = conv_1(in_channel, out_channel)
+        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.elu1 = nn.ELU()
+        self.conv2 = conv_1(out_channel, out_channel)
+        self.bn2 = nn.BatchNorm2d(out_channel)
+        self.elu2 = nn.ELU()
+        self.dropout = nn.Dropout()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.elu1(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.elu2(x)
+        x = self.dropout(x)
+        return torch.mean(x.view(x.size()[0], -1), dim=1)
 
 class DownBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
@@ -92,6 +116,7 @@ class UNet(nn.Module):
         self.up4 = UpBlock(16, 16, 16, bilinear)
         self.out_conv = OutBlock(16, classes)
         self.dropout2 = nn.Dropout()
+        self.branch = BranchBlock(128, 1)
 
     def forward(self, x):
         x1 = self.in_conv(x) # (2, 224, 224) => (16, 112, 122)
@@ -99,6 +124,7 @@ class UNet(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
+        y = self.branch(x5)
         x = self.up1(x5, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
@@ -107,4 +133,4 @@ class UNet(nn.Module):
 
         if self.dropout:
             x = self.dropout2(x)
-        return x, torch.mean(x5.view(x5.size()[0], -1), dim=1)
+        return x, y

@@ -154,7 +154,7 @@ class Trainer():
 
             t = target.view(batch_size, -1)
             t = t.sum(dim=1)
-            target2 = (t == 0).float() # 1 is unsegmentable
+            target2 = (t != 0).float() # 1 is segmentable
 
             input = cuda(Variable(input))
             target = cuda(Variable(target))
@@ -165,7 +165,7 @@ class Trainer():
             output = F.sigmoid(output)
             output2 = F.sigmoid(output2)
 
-            output2 = (output2 <= 0.5).float()
+            output2 = (output2 >= 0.5).float()
             # print(output.size(), output2.size())
             output = output * output2.view(batch_size, 1, 1, 1)          
 
