@@ -49,7 +49,8 @@ class Init():
                 init.kaiming_uniform(m.weight)
             elif self.init is "he_normal":
                 init.kaiming_normal(m.weight)
-            m.bias.data.zero_()
+            if m.bias is not None:
+                m.bias.data.zero_()
 
 class Trainer(): 
     """trainer class

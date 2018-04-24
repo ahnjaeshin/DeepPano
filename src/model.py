@@ -21,14 +21,19 @@ class ConvBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channel)
         self.elu2 = nn.ELU(inplace=True)
 
+        self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=1, bias=False),
+                nn.BatchNorm2d(out_channel))
+
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.elu1(x)
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.elu2(x)
-        return x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.elu1(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += self.shortcut(x)
+        out = self.elu2(out)
+        return out
 
 class InBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
@@ -58,16 +63,20 @@ class BranchBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channel)
         self.elu2 = nn.ELU()
         self.dropout = nn.Dropout()
+        self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=1, bias=False),
+                nn.BatchNorm2d(out_channel))
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.elu1(x)
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.elu2(x)
-        x = self.dropout(x)
-        return torch.mean(x.view(x.size()[0], -1), dim=1)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.elu1(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += self.shortcut(x)
+        out = self.elu2(out)
+        out = self.dropout(out)
+        return torch.mean(out.view(out.size()[0], -1), dim=1)
 
 class DownBlock(nn.Module):
     def __init__(self, in_channel, out_channel):

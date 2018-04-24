@@ -113,6 +113,10 @@ def main(config):
 
     dummy_input = Variable(torch.rand(1, 2, 128, 128), requires_grad=True)
     writers['train'].add_graph(model, (dummy_input, ))
+
+    # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
+    # writers['train'].add_graph_onnx("graph.proto")
+
     writers['train'].add_scalar('number of parameter', count_parameters(model))
 
 
