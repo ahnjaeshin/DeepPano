@@ -133,7 +133,11 @@ def generateTargetImage(row):
     imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
     if (segType < 0):
         print('{} segmentable type is error {}. skip.'.format(imgName, segType))
-        return outRow[1:]
+        trainVal = outRow[-1]
+        outRow = outRow[1:-2]
+        outRow.append(-1)
+        outRow.append(trainVal)
+        return outRow
 
     if (segType >= 10): # not segmentable
         targetImg = np.zeros(cropAnnotImg.shape, dtype=np.uint8)
