@@ -142,8 +142,6 @@ class Trainer():
         metric_scores = [AverageMeter() for metric in self.metrics]
         acc_score = AverageMeter()
 
-        best_score = 0
-
         self.model.train(train)
 
         start = time.time()

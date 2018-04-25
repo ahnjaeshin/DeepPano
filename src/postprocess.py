@@ -8,6 +8,7 @@ from torchvision import transforms
 from torch.nn import functional as F
 import torchvision.transforms.functional as F_trans
 from PIL import Image
+import numpy as np
 from torch.autograd import Variable
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -19,7 +20,6 @@ class Inference():
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),         
-            transforms.Normalize(mean=(0,0), std=(255,255)),
         ])
         self.path = path
         if path:
@@ -29,7 +29,10 @@ class Inference():
         if os.path.isfile(path):
             print("=> loading checkpoint '{}'".format(path))
 
-            checkpoint = torch.load(path)
+            if torch.cuda.is_available():
+                checkpoint = torch.load(path)
+            else:
+                checkpoint = torch.load(path, map_location=lambda storage, loc: storage)
             self.model.load_state_dict(checkpoint['state_dict'], )
         else:
             print("=> no checkpoint found at '{}'".format(path))
@@ -38,15 +41,19 @@ class Inference():
         img = Image.merge("LA", (Image.open(segment_path), Image.open(pano_path)))
         img = self.transform(img)
         img = Variable(img.view(1, 2, 224, 224))
-        output = self.model(img)
+        output, segmentable = self.model(img)
         output = F.sigmoid(output)
-        output = F_trans.to_pil_image(output.data.view(1, 224, 224))
+        output = output.data.view(224, 224)
+        output = output.numpy()
+        output = (output > 0.5).astype(int) * 255
+        output = Image.fromarray(np.uint8(output))
+
         output.save('./example.png')
 
 def main(path):
-    model = UNet(2, 1)
+    model = UNet(2, 1, False)
     i = Inference(model, path)
-    i.infer('../data/metadata/FirstSet-20180415182244-2/cropPanoImg-T1-Pano-052-11.jpg', '../data/metadata/FirstSet-20180415182244-2/cropBoxImg-T1-Pano-052-11.jpg')
+    i.infer('../data/metadata/FirstSet-20180415182244-2/cropPanoImg-T1-Pano-042-11.jpg', '../data/metadata/FirstSet-20180415182244-2/targetImg-T1-Pano-042-11.jpg')
 
 if __name__ == "__main__":
     args = parser.parse_args()
