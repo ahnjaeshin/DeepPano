@@ -7,6 +7,31 @@ import logging
 
 from slacker import Slacker
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+# define a class to log values during training
+class AverageMeter(object):
+    """
+    https://github.com/pytorch/examples/blob/master/imagenet/main.py
+    Computes and stores the average and current value
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
 def logger(func):
     """decorator to log arguments passed into the function
     
@@ -51,7 +76,11 @@ def slack_message(text, channel=None):
     if not channel:
         channel = 'C9ZKLPGBV' # channel id of #botlog channel
 
-    slack.chat.post_message(channel, text, as_user=False, username=host)
+    try:
+        slack.chat.post_message(channel, text, as_user=False, username=host)
+    except:
+        print("slack error occured")
+
 
 def main():
     slack_message('앞으로 aws ec2 instance에서 학습 돌리는건 여기로 logging이 될 것입니다, 원래 이 함수에 exception도 잡아야 하는데 귀찮..', '#ct')
