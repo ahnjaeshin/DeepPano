@@ -112,20 +112,21 @@ class UpBlock(nn.Module):
 class UNet(nn.Module):
     def __init__(self, channels, classes, bilinear=True, dropout=False):
         super(UNet, self).__init__()
+        self.UNIT = 4
         self.dropout = dropout
-        self.in_conv = InBlock(channels, 32)
-        self.down1 = DownBlock(32, 64)
-        self.down2 = DownBlock(64, 128)
-        self.down3 = DownBlock(128, 256)
-        self.down4 = DownBlock(256, 256)
+        self.in_conv = InBlock(channels, self.UNIT)
+        self.down1 = DownBlock(self.UNIT, self.UNIT*2)
+        self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3 = DownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4 = DownBlock(self.UNIT*8, self.UNIT*8)
         self.dropout1 = nn.Dropout()
-        self.up1 = UpBlock(256, 256, 128, bilinear)
-        self.up2 = UpBlock(128, 128, 64, bilinear)
-        self.up3 = UpBlock(64, 64, 32, bilinear)
-        self.up4 = UpBlock(32, 32, 32, bilinear)
-        self.out_conv = OutBlock(32, classes)
+        self.up1 = UpBlock(self.UNIT*8, self.UNIT*8, self.UNIT*4, bilinear)
+        self.up2 = UpBlock(self.UNIT*4, self.UNIT*4, self.UNIT*2, bilinear)
+        self.up3 = UpBlock(self.UNIT*2, self.UNIT*2, self.UNIT, bilinear)
+        self.up4 = UpBlock(self.UNIT, self.UNIT, self.UNIT, bilinear)
+        self.out_conv = OutBlock(self.UNIT, classes)
         self.dropout2 = nn.Dropout()
-        self.branch = BranchBlock(256, 1)
+        self.branch = BranchBlock(self.UNIT*8, 1)
 
     def forward(self, x):
         x1 = self.in_conv(x) # (2, 224, 224) => (16, 112, 122)

@@ -1,9 +1,7 @@
 from model import UNet
-from trainer import Trainer
 import argparse
 import os
 import torch
-from preprocess import PanoSet
 from torchvision import transforms
 from torch.nn import functional as F
 import torchvision.transforms.functional as F_trans

@@ -6,23 +6,25 @@ timer interrupt
 
 
 import argparse
+import datetime
 import json
-
+import socket
+import random
+import numpy as np
 import torch
 import torch.nn as nn
-import socket
-import datetime
-
-from model import UNet
-from preprocess import PanoSet
-from torchvision import transforms
-from trainer import Trainer
-from transform import DualAugment, ToBoth, ImageOnly, TargetOnly
-import metric
-import loss
-from utils import slack_message, count_parameters
 from tensorboardX import SummaryWriter
 from torch.autograd import Variable
+
+import loss
+import metric
+from dataset import PanoSet
+from model import UNet
+from torchvision import transforms
+from trainer import Trainer
+import augmentation as AUG
+from utils import count_parameters, slack_message
+import torch.multiprocessing as mp
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
@@ -49,6 +51,45 @@ class Filter():
                 return False
         return True
 
+def getAugmentation(augments):
+    
+    def lookupAugment(category, type, param=None):
+        types = {
+            "HFlip": transforms.RandomHorizontalFlip,
+            "VFlip": transforms.RandomVerticalFlip,
+            "Rotate": transforms.RandomRotation,
+            "Resize": transforms.Resize,
+            "ToTensor": transforms.ToTensor,
+            "Threshold": AUG.Threshhold,
+        }
+
+        categories = {
+            "All": AUG.ToAll,
+            "Input": AUG.InputOnly,
+            "Target": AUG.TargetOnly,
+            "Pano": AUG.PanoOnly,
+            "Box": AUG.BoxOnly,
+        }
+
+        aug_func = types[type]() if param is None else types[type](**param)
+        return categories[category](aug_func)
+
+    return AUG.TripleAugment([lookupAugment(**a) for a in augments])
+
+class TypeParser:
+    
+    def __init__(self, table):
+        self.table = table
+
+    def __call__(self, type, param=None):
+        return self.lookup(type)() if param is None else self.lookup(type)(**param)
+
+    def lookup(self, type):
+        if type not in self.table:
+            print("table: {}".format(self.table))
+            raise NotImplementedError
+        return self.table[type]
+
 
 def main(config):
     
@@ -62,6 +103,17 @@ def main(config):
     config_logging_title = config_logging["title"]
     config_logging_trial = config_logging["trial"]
 
+    if config_logging["reproducible"]:
+        print('fix seed on')
+        seed = 0
+        random.seed(seed) # augmentation
+        np.random.seed(seed) # numpy
+        torch.manual_seed(seed) # cpu
+        torch.cuda.manual_seed(seed) # gpu
+        torch.cuda.manual_seed_all(seed) # multi gpu
+        torch.backends.cudnn.enabled = False # cudnn library 
+        torch.backends.cudnn.deterministic = True
+
     log_dir = 'runs/{title}/{time}_{host}_{trial}/'.format(title=config_logging_title, 
                                                            time=datetime.datetime.now().strftime('%b%d_%H-%M'), 
                                                            host=socket.gethostname(), 
@@ -69,28 +121,14 @@ def main(config):
     writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
     
     # need better way
+    log = []
     slack_message(json.dumps(config), config_logging_channel)
 
     ##################
     #  augmentation  #
     ##################
     config_augmentation = config["augmentation"]
-
-    augmentations = {
-        'train' : DualAugment([
-            ToBoth(transforms.RandomHorizontalFlip()),
-            ToBoth(transforms.RandomVerticalFlip()),
-            ToBoth(transforms.RandomRotation(180)),
-            ToBoth(transforms.Resize((224, 224))),
-            TargetOnly(transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 ))),
-            ToBoth(transforms.ToTensor()), 
-        ]),
-        'val' : DualAugment([
-            ToBoth(transforms.Resize((224, 224))),
-            TargetOnly(transforms.Lambda(lambda img: img.point(lambda p: 255 if p > 50 else 0 ))),
-            ToBoth(transforms.ToTensor()),
-        ])
-    }
+    augmentations = {x : getAugmentation(config_augmentation[x]) for x in ('train', 'val')}
 
     ##################
     #     dataset    #
@@ -104,21 +142,20 @@ def main(config):
     datasets = { x: PanoSet(config_dataset_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
+    log.append(str(datasets['train']))
+    log.append(str(datasets['val']))
+
     ##################
     #      model     #
     ##################
     config_model = config["model"]
 
     model = UNet(2, 1, bilinear=False)
-
-    dummy_input = Variable(torch.rand(1, 2, 128, 128), requires_grad=True)
-    writers['train'].add_graph(model, (dummy_input, ))
-
+    # dummy_input = torch.rand(1, 2, 128, 128)
+    # writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
     # writers['train'].add_graph_onnx("graph.proto")
-
     writers['train'].add_scalar('number of parameter', count_parameters(model))
-
 
     ##################
     #   evaluation   #
@@ -132,17 +169,13 @@ def main(config):
     metric_lookup = {"IOU": metric.IOU, "DICE": metric.DICE}
     metrics = [metric_lookup[m["type"]](m["threshold"]) for m in config_metrics]
 
-    if config_loss["type"] == "BCE":
-        criterion = nn.BCEWithLogitsLoss()
-    elif config_loss["type"] == "IOU":
-        criterion = loss.IOULoss()
-    elif config_loss["type"] == "DICE":
-        criterion = loss.DICELoss()
-    elif config_loss["type"] == "BCEIOU":
-        loss_param = config_loss["param"]
-        criterion = loss.BCEIOULoss(jaccard_weight=loss_param["weight"])
-    else:
-        raise NotImplementedError
+    lossParser = TypeParser(table = {
+        "BCE": nn.BCEWithLogitsLoss,
+        "IOU": loss.IOULoss,
+        "DICE": loss.DICELoss,
+        "BCEIOU": loss.BCEIOULoss,
+    })
+    criterion = lossParser(**config_loss)
 
     ##################
     #    learning    #
@@ -154,28 +187,23 @@ def main(config):
     # give path to load checkpoint or null
     config_learning_checkpoint = config_learning["checkpoint"]
 
-    # SGD
+    # optimizer, default : 0.9, False, 1-e4
     config_optimizer = config_learning["optimizer"]
-    config_learning_lrinit = config_learning["lr_init"]
+    config_optimizer["param"]["params"] = model.parameters()
+    optimParser = TypeParser(table = {
+        "SGD": torch.optim.SGD,
+        "ADAM": torch.optim.Adam,
+    })
+    optimizer = optimParser(**config_optimizer)
 
-    # default : 0.9, False, 1-e4
-    if config_optimizer["type"] == "SGD":
-        optim_param = config_optimizer["param"]
-        optimizer = torch.optim.SGD(model.parameters(), 
-                                    lr=config_learning_lrinit, 
-                                    momentum=optim_param["momentum"],
-                                    nesterov=optim_param["nestrov"],
-                                    weight_decay=optim_param["weight_decay"])
+    config_learning_scheduler = config_learning["lr_schedule"]
+    config_learning_scheduler["param"]["optimizer"] = optimizer
+    schedParser = TypeParser(table = {
+        "Step": torch.optim.lr_scheduler.StepLR,
+        "Plateau": torch.optim.lr_scheduler.ReduceLROnPlateau,
+    })
+    scheduler = schedParser(**config_learning_scheduler)
 
-    if config_optimizer["type"] == "ADAM":
-        optim_param = config_optimizer["param"]
-        optimizer = torch.optim.SGD(model.parameters(), 
-                                    lr=config_learning_lrinit, 
-                                    weight_decay=optim_param["weight_decay"])
-
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size= 130, gamma=0.1)
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-    
     try: 
         trainer = Trainer(model=model, 
                         datasets=datasets, 
@@ -193,19 +221,8 @@ def main(config):
     ##################
     #    training    #
     ##################
-    config_training = config["training"]
-    # print out log every log_feq #
-    config_learning_logfreq = config_training["log_freq"]
-    # batch size
-    config_learning_batchsize = config_training['batch_size']
-    config_learning_numworker = config_training['num_workers']
-    config_learning_epoch = config_training['epochs']
-
     try:
-        trainer.train(batch_size=config_learning_batchsize,
-                    num_workers=config_learning_numworker,
-                    epochs=config_learning_epoch,
-                    log_freq=config_learning_logfreq)
+        trainer.train(**config["training"])
     except KeyboardInterrupt:
         slack_message("abupt end", config_logging_channel)
     
@@ -215,5 +232,6 @@ def main(config):
 if __name__ == "__main__":
     args = parser.parse_args()
     main(json.load(open(args.config)))
+    # mp = mp.set_start_method("spawn")
 
 # json.dump(config, fp, sort_keys=True, indent=4)

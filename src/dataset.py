@@ -13,7 +13,7 @@ import torch
 import numpy as np
 from PIL import Image
 from typing import NamedTuple
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import pandas as pd
 
 IMG_EXTENSIONS = ('.png', '.jpg', '.jpeg')
@@ -31,7 +31,7 @@ def getAbsoluteAddress(filedir):
 
 class Patch(NamedTuple):
     pano_path: str
-    segment_path: str
+    box_path: str
     input_path: str
     target_path: str
 
@@ -50,11 +50,11 @@ class PanoSet(Dataset):
         for idx, row in df.iterrows():
             if filter_func(row):
                 pano_path = getAbsoluteAddress(row['Cropped.Pano.Img'])
-                segment_path = getAbsoluteAddress(row['Cropped.Box.Img'])
+                box_path = getAbsoluteAddress(row['Cropped.Box.Img'])
                 input_path = getAbsoluteAddress(row['Cropped.Input.Img'])
                 target_path = getAbsoluteAddress(row['Target.Img'])
 
-                data.append(Patch(pano_path, segment_path, input_path, target_path))
+                data.append(Patch(pano_path, box_path, input_path, target_path))
         
         self.data = data
         self.meta_data = df
@@ -70,18 +70,21 @@ class PanoSet(Dataset):
                 target is class_index
         """
         patch = self.data[index]
-        img = Image.merge("LA", (Image.open(patch.segment_path), Image.open(patch.pano_path)))
 
+        input_pano = Image.open(patch.pano_path)
+        input_box = Image.open(patch.box_path)
         target = Image.open(patch.target_path)
-        target = target.point(lambda p: 255 if p > 50 else 0 )
-        assert set(np.unique(target)) == {0,255} or set(np.unique(target)) == {0} or set(np.unique(target)) == {255}
         filepath = patch.input_path
 
+        target = target.point(lambda p: 255 if p > 50 else 0 )
+        assert set(np.unique(target)).issubset({0,255})
+
         if self.transform is not None and doTransform:
-            img, target = self.transform(img, target)
-        assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
-        
-        return (img, target, filepath, index)
+            input_pano, input_box, target = self.transform(input_pano, input_box, target)
+        input = torch.cat([input_box, input_pano], dim=0)
+        assert set(np.unique(target)).issubset({0,1})
+
+        return (input, target, filepath, index)
 
     def __len__(self):
         return len(self.data)

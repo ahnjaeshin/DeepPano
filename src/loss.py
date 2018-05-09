@@ -10,10 +10,10 @@ def where(cond, x_1, x_2):
 class BCEIOULoss():
     """BCE - log(jaccard index)
     """
-    def __init__(self, jaccard_weight=0):
-        assert jaccard_weight >= 0 and jaccard_weight <= 1
+    def __init__(self, weight=0):
+        assert weight >= 0 and weight <= 1
         self.nll_loss = nn.BCEWithLogitsLoss()
-        self.jaccard_weight = jaccard_weight
+        self.jaccard_weight = weight
 
     def __call__(self, output, target):
         loss = self.nll_loss(output, target)

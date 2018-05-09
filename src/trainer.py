@@ -32,10 +32,13 @@ import shutil
 from metric import Accuracy
 
 
-def cuda(x, async=True):
+def cuda(x, async=False):
     """for use in gpu
     add async=True"""
-    return x.cuda() if torch.cuda.is_available() else x
+    if async:
+        return x.cuda(non_blocking=True) if torch.cuda.is_available() else x
+    else:
+        return x.cuda() if torch.cuda.is_available() else x
 
 class Init():
     def __init__(self, init="xavier_normal"):
@@ -168,10 +171,10 @@ class Trainer():
             # print(output.size(), output2.size())
             output = output * output2.view(batch_size, 1, 1, 1)          
 
-            losses.update(loss.cpu().data[0], batch_size)
-            losses2.update(loss2.cpu().data[0], batch_size)
+            losses.update(loss.cpu().item(), batch_size)
+            losses2.update(loss2.cpu().item(), batch_size)
             forward_times.update(time.time() - data_times.val)
-
+        
             if train : 
                 self.optimizer.zero_grad()            
                 loss.backward(retain_graph=True)
