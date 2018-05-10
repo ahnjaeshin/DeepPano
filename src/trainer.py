@@ -114,9 +114,6 @@ class Trainer():
         self.best_score = 0
         self.init = Init(init)
 
-        self.criterion2 = nn.BCEWithLogitsLoss()
-        self.acc = Accuracy(0.5)
-
         if init:
             self.model.apply(self.init)
 
@@ -124,7 +121,9 @@ class Trainer():
             self.load(checkpoint)
 
         if not torch.cuda.is_available(): 
-            print("CUDA is unavailable. It'll be very slow...")
+            print("CUDA is unavailable")
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def __call__(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
         """Call trainer
@@ -151,9 +150,10 @@ class Trainer():
 
         if torch.cuda.is_available():
             self.model = cuda(self.model)
+            self.criterion = cuda(self.criterion)
             torch.backends.cudnn.benchmark = True
         if torch.cuda.device_count() > 1:
-            self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count()))
+            self.model = torch.nn.DataParallel(self.model, device_ids=[0])
 
         start_time = datetime.datetime.now()
         self.best_score = 0
@@ -208,7 +208,12 @@ class Trainer():
             batch_size = input.size(0)
 
             # forward & backward
-            loss, output = self.batch_once(input, target, train)
+            if train:
+                loss, output = self.batch_once(input, target, train)
+            else:
+                with torch.no_grad():
+                    loss, output = self.batch_once(input, target, train)
+            
 
             losses.update(loss, batch_size)
             del loss
@@ -268,7 +273,9 @@ class Trainer():
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
 
-        input, target = cuda(input), cuda(target)
+        # input, target = cuda(input), cuda(target)
+        input = input.to(self.device)
+        target = target[0].to(self.device), target[1].to(self.device)
 
         output = self.model(input)
         loss = self.criterion(outputs=output, targets=target)

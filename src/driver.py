@@ -14,8 +14,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-from torch.autograd import Variable
-from torchsummary import summary
 
 import loss
 import metric

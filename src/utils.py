@@ -11,6 +11,7 @@ from collections import OrderedDict
 from functools import reduce
 
 import math
+import numpy as np
 
 from slacker import Slacker
 
@@ -106,8 +107,8 @@ class ClassMeter():
             self.outputs = output.numpy().flatten()
             self.targets = output.numpy().flatten()
         else:
-            self.outputs = self.outputs.append(output.numpy())
-            self.targets = self.targets.append(target.numpy())
+            self.outputs = np.append(self.outputs, output.numpy())
+            self.targets = np.append(self.targets, target.numpy())
         
 
 """
@@ -155,10 +156,10 @@ def model_summary(model, input_size):
             not (module == model)):
             hooks.append(module.register_forward_hook(hook))
             
-    if torch.cuda.is_available():
-        dtype = torch.cuda.FloatTensor
-    else:
-        dtype = torch.FloatTensor
+    # if torch.cuda.is_available():
+    #     dtype = torch.cuda.FloatTensor
+    # else: #TODO : change to support cuda
+    dtype = torch.FloatTensor
     
     # check if there are multiple inputs to the network
     if isinstance(input_size[0], (list, tuple)):
@@ -175,6 +176,7 @@ def model_summary(model, input_size):
     model.apply(register_hook)
     # make a forward pass
     model(x)
+
     # remove these hooks
     for h in hooks:
         h.remove()
