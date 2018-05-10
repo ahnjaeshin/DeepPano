@@ -53,7 +53,8 @@
         ]
     },
     "dataset": {
-        "data-dir": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/data/metadata/FirstSet-20180415182244-2-smallset.csv",
+        "data-dir": "../data/Stat-DataSet.csv",
+        "name": "SecondSet-20180505010809-9-mini",
         "filter": {
             "train": [
                 "train"
@@ -65,24 +66,28 @@
     },
     "model": {
         "type": "UNET",
-        "config": {
-            "type": null,
-            "input_channel": 2,
-            "output_channel": 1,
-            "use_dropout": true
+        "param": {
+            "bilinear": false,
+            "unit": 4
         }
     },
     "evaluation": {
         "loss": {
-            "type": "DICE"
+            "segmentation": {
+                "type": "DICE",
+                "param": {}
+            },
+            "classification": {
+                "type": "BCE",
+                "param": {}
+            },
+            "param": {}
         },
+
         "metrics": [
-            { "type": "IOU", "threshold": 0.3 },
-            { "type": "IOU", "threshold": 0.5 },
-            { "type": "IOU", "threshold": 0.8 },
-            { "type": "DICE", "threshold": 0.3 },
-            { "type": "DICE", "threshold": 0.5 },
-            { "type": "DICE", "threshold": 0.8 }
+            { "type": "IOU", "param": {"threshold": 0.5} },
+            { "type": "DICE", "param": {"threshold": 0.5} },
+            { "type": "accuracy", "param": {"threshold": 0.5} }
         ]
     },
     "learning": {
