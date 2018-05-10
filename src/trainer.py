@@ -26,7 +26,7 @@ from torchvision.utils import make_grid
 from torchvision import datasets
 from torch.autograd import Variable
 
-from utils import slack_message, AverageMeter
+from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, OutputMeter
 from torch.nn import functional as F
 import shutil
 from metric import Accuracy
@@ -50,6 +50,24 @@ def cuda(x, async=False):
         return x.cuda(non_blocking=True)
     else:
         return x.cuda()
+
+def render_output(x):
+    """sigmoid => cpu
+    
+    Arguments:
+        x {tensor or iterable of tensors}
+    """
+    if isinstance(x, collections.Iterable):
+        return [F.sigmoid(x_i).detach().cpu() for x_i in x]
+    else:
+        return F.sigmoid(x).detach().cpu()
+
+def write_scalar_log(name, val, epoch, log, writer):
+    """write log to both slack and tensorboard
+    """
+
+    log.append('{name} : {val:.5f}'.format(name=name, val=val))
+    writer.add_scalar(name, val, epoch)
 
 class Init():
     def __init__(self, init="xavier_normal"):
@@ -141,10 +159,10 @@ class Trainer():
         self.best_score = 0
 
         for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
-            checkpoint = ((epoch + 1) % log_freq == 0)
+            do_log = ((epoch + 1) % log_freq == 0)
 
             for state in ('train', 'val'):
-                self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], checkpoint)
+                self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], do_log)
             
             elasped_time = datetime.datetime.now() - start_time
             eta = start_time + ((elasped_time / ((epoch - self.start_epoch) + 1)) * (epochs - self.start_epoch))
@@ -155,7 +173,7 @@ class Trainer():
 
         slack_message('train ended', '#botlog')
 
-    def train_once(self, epoch, dataloader, train, writer, checkpoint=True):
+    def train_once(self, epoch, dataloader, train, writer, do_log=True):
         """one forward, one backward with logging
         
         Arguments:
@@ -165,17 +183,15 @@ class Trainer():
             writer {tensorboardX writer} -- writer log
         
         Keyword Arguments:
-            checkpoint {bool} -- save model if true (default: {True})
+            do_log {bool} -- save model if true (default: {True})
         """
         
         losses = AverageMeter()
         data_times = AverageMeter()
         propagate_times = AverageMeter()
-        
-        curr_scores = AverageMeter()
-        
         metric_scores = [AverageMeter() for metric in self.metrics]
-        acc_score = AverageMeter()
+        metric_geometric_scores = [GeometricMeter() for metric in self.metrics]
+        curr_scores = AverageMeter() # average of all metrics
 
         self.model.train(train)
 
@@ -187,82 +203,53 @@ class Trainer():
             # forward & backward
             loss, output = self.batch_once(input, target, train)
 
-            losses.update(loss.cpu().item(), batch_size)
-            propagate_times.update(time.time() - data_times.val)
-
-            output2 = output[1]
-            output = output[0]
-
-            target_segmentation, target_classification = target
-
+            losses.update(loss, batch_size)
             del loss
-                
-            backward_times.update(time.time() - forward_times.val)
+            propagate_times.update(time.time() - data_times.val)            
             start = time.time()
 
-            output = F.sigmoid(output)
-            output2 = F.sigmoid(output2)
-
-            output2 = (output2 >= 0.5).float()
-            output = output * output2.view(batch_size, 1, 1, 1)   
-
-            for metric, score in zip(self.metrics, metric_scores):
-                score.update(metric.eval(output.data.cpu().numpy(), target_segmentation.data.cpu().numpy()), batch_size)
-                curr_scores.update(score.val, batch_size)
-
-            acc_score.update(self.acc.eval(output2.data.cpu().numpy(), target_classification.data.cpu().numpy()), batch_size)
-
-            if batch_idx == len(dataloader) - 1: 
-                log = [
-                    '[{}]'.format('train' if train else 'val'),
-                    'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
-                    'Propagate Time {time.val:.3f} ({time.avg:.3f})'.format(time=propagate_times),
-                    'Data Load Time {time.val:.3f} ({time.avg:.3f})'.format(time=data_times),
-                    'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses),
-                ]
-
-                writer.add_scalar('time/propagate', propagate_times.avg, epoch)
-                writer.add_scalar('time/data', data_times.avg, epoch)
-                writer.add_scalar('loss', losses.avg, epoch)
-
-                if train:
-                    lr = [group['lr'] for group in self.optimizer.param_groups][0]
-                    tqdm.write('Learning rate: {}'.format(lr))
-                    writer.add_scalar('learning rate', lr, epoch)
-
-                    for tag, value in self.model.named_parameters():
-                        tag = tag.replace('.', '/')
-                        writer.add_histogram('model/(train)' + tag, value.data.cpu().numpy(), epoch, bins='doane')
-                        writer.add_histogram('model/(train)' + tag + '/grad', value.grad.data.cpu().numpy(), epoch, bins='doane')
-
-                for metric, score in zip(self.metrics, metric_scores):
-                    log.append('metric/{name}: {metric.val:.5f} ({metric.avg:.5f})'.format(name=metric.__repr__(), metric=score))
-                    writer.add_scalar('metric/{name}'.format(name = metric.__repr__()), score.avg, epoch)
-                log.append('acc: {acc.avg}'.format(acc=acc_score))
-                writer.add_scalar('metric/accuracy', acc_score.avg, epoch)
-                log = "\n".join(log)
-
-                writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-                writer.add_image('input/guideline', make_grid(input.data.cpu().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-                writer.add_image('target_segmentation', make_grid(target_segmentation.data.cpu(), normalize=True, scale_each=True), epoch)
-                writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
+            for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
+                arith_score.update(metric.eval(output, target), batch_size)
+                geo_score.update(metric.eval(output, target), batch_size)
+                curr_scores.update(arith_score.val, batch_size)
                 
-                writer.add_pr_curve('accuracy/iou', target_segmentation.data.cpu(), output.data.cpu(), epoch)
-                writer.add_pr_curve('accuracy/acc', target_classification.data.cpu(), output2.data.cpu(), epoch)
+        log = [
+            '[{0}] Epoch: [{1}][{2}/{3}]'.format('train' if train else 'val', epoch, batch_idx + 1, len(dataloader)),
+        ]
+        write_scalar_log('time/propagate', propagate_times.avg, epoch, log, writer)
+        write_scalar_log('time/data', data_times.avg, epoch, log, writer)
+        write_scalar_log('loss', losses.avg, epoch, log, writer)
 
-                # writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
-
-                tqdm.write(log)
-
-                is_best = self.best_score < curr_scores.avg
-                self.best_score = max(self.best_score, curr_scores.avg)
-
-                if checkpoint:
-                    slack_message(log, '#botlog')
-                    self.save_checkpoint(epoch, is_best)
-                
-        if train: # smoothing effect to LR reduce on platue
+        if train:
+            lr = [group['lr'] for group in self.optimizer.param_groups][0]
             self.scheduler.step()
+            write_scalar_log('learning_rate', lr, epoch, log, writer)
+
+            for tag, value in self.model.named_parameters():
+                tag = tag.replace('.', '/')
+                writer.add_histogram('model/(train)' + tag, value, epoch, bins='doane')
+                writer.add_histogram('model/(train)' + tag + '/grad', value, epoch, bins='doane')
+        else:
+            is_best = self.best_score < curr_scores.avg
+            self.best_score = max(self.best_score, curr_scores.avg)
+            self.save_checkpoint(epoch, is_best)
+
+        for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
+            write_scalar_log('metric/arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
+            write_scalar_log('metric/geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
+
+        tqdm.write("\n".join(log))
+
+        if do_log:
+            slack_message("\n".join(log), '#botlog')
+
+        # writer.add_image('input/pano', make_grid(input.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+        # writer.add_image('input/guideline', make_grid(input.data.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        # writer.add_image('target_segmentation', make_grid(target_segmentation.data.cpu(), normalize=True, scale_each=True), epoch)
+        # writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
+        
+        # writer.add_pr_curve('accuracy/iou', target_segmentation.data.cpu(), output.data.cpu(), epoch)
+        # writer.add_pr_curve('accuracy/acc', target_classification.data.cpu(), output2.data.cpu(), epoch)
 
         # todo : for every batch, log hard examples
 
@@ -279,7 +266,7 @@ class Trainer():
             loss.backward()         
             self.optimizer.step()
 
-        return loss, output
+        return loss.cpu().item(), render_output(output)
 
     def search(self):
         pass

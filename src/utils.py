@@ -56,7 +56,7 @@ class GeometricMeter():
     
     def update(self, val, n=1):
         self.val = val
-        self.product += math.log(val) * n
+        self.product += math.log(val + 1e-15) * n
         self.count += n
         self.avg = math.exp(self.product / self.count)
 

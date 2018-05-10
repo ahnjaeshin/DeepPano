@@ -46,7 +46,7 @@ class IOU(Metric):
         return np.mean(np.divide(intersection, union))
 
     def __repr__(self):
-        return 'IoU, threshold: {}'.format(self.threshold)
+        return 'IoU({})'.format(self.threshold)
 
 class DICE(Metric):
     
@@ -81,7 +81,7 @@ class DICE(Metric):
         return np.mean(np.divide(intersection, union))
 
     def __repr__(self):
-        return 'DICE, threshold: {}'.format(self.threshold)
+        return 'DICE({})'.format(self.threshold)
 
 class Accuracy(Metric):
     
@@ -102,7 +102,7 @@ class Accuracy(Metric):
         return np.mean((out == target).astype(int))
 
     def __repr__(self):
-        return 'DICE, threshold: {}'.format(self.threshold)
+        return 'accuracy({})'.format(self.threshold)
 
 
 class F1BySegment(Metric):
@@ -122,5 +122,5 @@ class F1BySegment(Metric):
         raise NotImplementedError
 
     def __repr__(self):
-        return 'F1, threshold: {}'.format(self.threshold)
+        return 'F1({})'.format(self.threshold)
 

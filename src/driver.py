@@ -172,6 +172,7 @@ def main(config):
     # writers['train'].add_graph_onnx("graph.proto")
     model_sum = model_summary(model, input_size=(2, 224, 224))
     writers['train'].add_scalar('number of parameter', count_parameters(model))
+    slack_message(model.__repr__(), config_logging_channel)
     slack_message(model_sum, config_logging_channel)
 
     ##################
@@ -185,8 +186,12 @@ def main(config):
     config_segmentation_loss = config_loss["segmentation"]
     config_classification_loss = config_loss["classification"]
 
-    metric_lookup = {"IOU": metric.IOU, "DICE": metric.DICE}
-    metrics = [metric_lookup[m["type"]](m["threshold"]) for m in config_metrics]
+    metricParser = TypeParser(table = {
+        "IOU": metric.IOU, 
+        "DICE": metric.DICE,
+        "accuracy": metric.Accuracy,
+    })
+    metrics = [metricParser(**m) for m in config_metrics]
 
     lossParser = TypeParser(table = {
         "IOU": loss.IOULoss,
