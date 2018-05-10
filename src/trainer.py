@@ -26,7 +26,7 @@ from torchvision.utils import make_grid
 from torchvision import datasets
 from torch.autograd import Variable
 
-from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, OutputMeter
+from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, ClassMeter
 from torch.nn import functional as F
 import shutil
 from metric import Accuracy
@@ -193,6 +193,13 @@ class Trainer():
         metric_geometric_scores = [GeometricMeter() for metric in self.metrics]
         curr_scores = AverageMeter() # average of all metrics
 
+        result_classification = ClassMeter()
+        result_segmentation = ClassMeter()
+
+        input_image = ImageMeter(30)
+        output_image = ImageMeter(30)
+        target_image = ImageMeter(30)
+
         self.model.train(train)
 
         start = time.time()
@@ -212,7 +219,14 @@ class Trainer():
                 arith_score.update(metric.eval(output, target), batch_size)
                 geo_score.update(metric.eval(output, target), batch_size)
                 curr_scores.update(arith_score.val, batch_size)
-                
+            
+            result_classification.update(output[1], target[1])
+            result_segmentation.update(output[0], target[0])
+
+            input_image.update(input)
+            output_image.update(output[0])
+            target_image.update(target[0])
+
         log = [
             '[{0}] Epoch: [{1}][{2}/{3}]'.format('train' if train else 'val', epoch, batch_idx + 1, len(dataloader)),
         ]
@@ -243,15 +257,13 @@ class Trainer():
         if do_log:
             slack_message("\n".join(log), '#botlog')
 
-        # writer.add_image('input/pano', make_grid(input.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        # writer.add_image('input/guideline', make_grid(input.data.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        # writer.add_image('target_segmentation', make_grid(target_segmentation.data.cpu(), normalize=True, scale_each=True), epoch)
-        # writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
+        writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('input/guideline', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('target/segmentation', make_grid(target_image.images, normalize=True, scale_each=True), epoch)
+        writer.add_image('output', make_grid(output_image.images, normalize=True, scale_each=True), epoch)
         
-        # writer.add_pr_curve('accuracy/iou', target_segmentation.data.cpu(), output.data.cpu(), epoch)
-        # writer.add_pr_curve('accuracy/acc', target_classification.data.cpu(), output2.data.cpu(), epoch)
-
-        # todo : for every batch, log hard examples
+        writer.add_pr_curve('accuracy/segmentation', result_classification.targets, result_classification.outputs, epoch)
+        writer.add_pr_curve('accuracy/classification', result_segmentation.targets, result_segmentation.outputs, epoch)
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})

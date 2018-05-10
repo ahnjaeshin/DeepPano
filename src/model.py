@@ -110,9 +110,9 @@ class UpBlock(nn.Module):
         return x
 
 class UNet(nn.Module):
-    def __init__(self, channels, classes, bilinear=True, dropout=False):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
         super(UNet, self).__init__()
-        self.UNIT = 4
+        self.UNIT = unit
         self.dropout = dropout
         self.in_conv = InBlock(channels, self.UNIT)
         self.down1 = DownBlock(self.UNIT, self.UNIT*2)

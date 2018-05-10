@@ -62,13 +62,53 @@ class GeometricMeter():
 
 class ImageMeter():
     
-    def __init__(self):
-        pass
+    def __init__(self, limit=20):
+        """images = 4d tensor of images
+        
+        Keyword Arguments:
+            limit {int} -- maximum number of images to store (default: {20})
+        """
 
-class OutputMeter():
+        self.images = None
+        self.limit = limit
+        self.count = 0
+
+    def update(self, image):
+        if self.count >= self.limit:
+            return
+        
+        n = image.size(0)
+        if self.count + n > self.limit:
+            image = image.narrow(0, 0, n)
+        
+        self.count += image.size(0)
+        assert (self.count <= self.limit)
+
+        if self.images is None:
+            self.images = image
+            return
+
+        self.images = torch.cat([self.images, image], dim=0)
+        
+
+class ClassMeter():
     
     def __init__(self):
-        pass
+        self.reset()
+    
+    def reset(self):
+        self.outputs = None
+        self.targets = None
+
+    def update(self, output, target):
+        
+        if self.outputs is None:
+            self.outputs = output.numpy().flatten()
+            self.targets = output.numpy().flatten()
+        else:
+            self.outputs = self.outputs.append(output.numpy())
+            self.targets = self.targets.append(target.numpy())
+        
 
 """
 Code borrowed & modified from https://github.com/sksq96/pytorch-summary/blob/master/torchsummary/torchsummary.py

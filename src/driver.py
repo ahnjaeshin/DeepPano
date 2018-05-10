@@ -165,7 +165,7 @@ def main(config):
     ##################
     config_model = config["model"]
 
-    model = UNet(2, 1, bilinear=False)
+    model = UNet(2, 1, **config_model["param"])
     # dummy_input = torch.rand(1, 2, 128, 128)
     # writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
