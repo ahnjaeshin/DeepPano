@@ -8,7 +8,9 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from collections import OrderedDict
+from functools import reduce
 
+import math
 
 from slacker import Slacker
 
@@ -16,7 +18,7 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 # define a class to log values during training
-class AverageMeter(object):
+class AverageMeter():
     """
     https://github.com/pytorch/examples/blob/master/imagenet/main.py
     Computes and stores the average and current value
@@ -27,9 +29,9 @@ class AverageMeter(object):
 
     def reset(self):
         self.val = 0
-        self.avg = 0
         self.sum = 0
         self.count = 0
+        self.avg = 0
 
     def update(self, val, n=1):
         self.val = val
@@ -37,19 +39,63 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+class GeometricMeter():
+    """Borrowed ideas from AverageMeter Above
+
+    because of over/under flow problems, log first
+    """
+
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        self.val = 0
+        self.product = 0
+        self.count = 0
+        self.avg = 0
+    
+    def update(self, val, n=1):
+        self.val = val
+        self.product += math.log(val) * n
+        self.count += n
+        self.avg = math.exp(self.product / self.count)
+
+class ImageMeter():
+    
+    def __init__(self):
+        pass
+
+class OutputMeter():
+    
+    def __init__(self):
+        pass
+
 """
 Code borrowed & modified from https://github.com/sksq96/pytorch-summary/blob/master/torchsummary/torchsummary.py
 """
 def model_summary(model, input_size):
+
+    def calculate_depth(module):
+        
+        assert isinstance(module, nn.Module)
+
+        if len(list(module.children())) == 0:
+            return 0
+        
+        depth = reduce(lambda max_d, m: max(max_d, calculate_depth(m) + 1), module.children(), -1)
+
+        return depth
+
     def register_hook(module):
         def hook(module, input, output):
-            class_name = str(module.__class__).split('.')[-1].split("'")[0]
+            class_name = str(module.__class__.__name__)
             module_idx = len(summary)
 
             m_key = '%s-%i' % (class_name, module_idx+1)
             summary[m_key] = OrderedDict()
             summary[m_key]['input_shape'] = list(input[0].size())
             summary[m_key]['input_shape'][0] = -1
+            summary[m_key]['depth'] = calculate_depth(module)
             if isinstance(output, (list,tuple)):
                 summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
             else:
@@ -81,7 +127,7 @@ def model_summary(model, input_size):
         x = Variable(torch.rand(1,*input_size)).type(dtype)
         
     log = []
-
+    max_depth = 0
     # create properties
     summary = OrderedDict()
     hooks = []
@@ -94,14 +140,24 @@ def model_summary(model, input_size):
         h.remove()
 
     log.append('----------------------------------------------------------------')
-    line_new = '{:>20}  {:>25} {:>15}'.format('Layer (type)', 'Output Shape', 'Param #')
+    line_new = '{:>20}  {:>20} {:>10}'.format('Layer (type)', 'Output Shape', 'Param #')
     log.append(line_new)
     log.append('================================================================')
     total_params = 0
     trainable_params = 0
+
+    max_depth = max({summary[layer]['depth'] for layer in summary})
+
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
-        line_new = '{:>20}  {:>25} {:>15}'.format(layer, str(summary[layer]['output_shape']), summary[layer]['nb_params'])
+
+        indent = '-' * (max_depth - summary[layer]['depth']) * 2
+
+        if summary[layer]['nb_params'] == 0:
+            line_new = '{:<25} {:>20} {:>10}'.format(indent + layer, str(summary[layer]['output_shape']), 'None')
+        else:
+            line_new = '{:<25} {:>20} {:>10}'.format(indent + layer, str(summary[layer]['output_shape']), summary[layer]['nb_params'])
+        
         total_params += summary[layer]['nb_params']
         if 'trainable' in summary[layer]:
             if summary[layer]['trainable'] == True:
