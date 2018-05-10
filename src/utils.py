@@ -80,7 +80,7 @@ class ImageMeter():
         
         n = image.size(0)
         if self.count + n > self.limit:
-            image = image.narrow(0, 0, n)
+            image = image.narrow(0, 0, self.limit - self.count)
         
         self.count += image.size(0)
         assert (self.count <= self.limit)
