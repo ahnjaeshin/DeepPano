@@ -153,7 +153,7 @@ class Trainer():
             self.criterion = cuda(self.criterion)
             torch.backends.cudnn.benchmark = True
         if torch.cuda.device_count() > 1:
-            self.model = torch.nn.DataParallel(self.model, device_ids=[0])
+            self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count()))
 
         start_time = datetime.datetime.now()
         self.best_score = 0
