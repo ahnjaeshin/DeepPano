@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 from torch.autograd import Variable
+from torchsummary import summary
 
 import loss
 import metric
@@ -23,8 +24,10 @@ from model import UNet
 from torchvision import transforms
 from trainer import Trainer
 import augmentation as AUG
-from utils import count_parameters, slack_message
+from utils import count_parameters, slack_message, model_summary
 import torch.multiprocessing as mp
+from typing import NamedTuple
+import pandas as pd
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", type=str, required=True, help="path to config file")
@@ -90,6 +93,12 @@ class TypeParser:
             raise NotImplementedError
         return self.table[type]
 
+class Data(NamedTuple):
+    metadata_path: str
+    pano_mean: float
+    pano_std: float
+    box_mean: float
+    box_std : float
 
 def main(config):
     
@@ -123,6 +132,7 @@ def main(config):
     # need better way
     log = []
     slack_message(json.dumps(config), config_logging_channel)
+    
 
     ##################
     #  augmentation  #
@@ -134,12 +144,17 @@ def main(config):
     #     dataset    #
     ##################
     config_dataset = config["dataset"]
-    config_dataset_path = config_dataset["data-dir"]
+    config_data_path = config_dataset["data-dir"]
+    config_data_name = config_dataset["name"]
     config_dataset_filter = config_dataset["filter"]
+
+    df = pd.read_csv(config_data_path)
+    data = df.loc[df['DataSet.Title'] == config_data_name].iloc[0]
+    data = Data(data['Csv.File'], data['Pano.Mean'], data['Pano.Stdev'], data['Box.Mean'], data['Box.Stdev'])    
 
     data_filter = { x : Filter(config_dataset_filter[x]) for x in ('train', 'val')}
 
-    datasets = { x: PanoSet(config_dataset_path, data_filter[x], transform=augmentations[x])
+    datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
     log.append(str(datasets['train']))
@@ -155,7 +170,9 @@ def main(config):
     # writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
     # writers['train'].add_graph_onnx("graph.proto")
+    model_sum = model_summary(model, input_size=(2, 224, 224))
     writers['train'].add_scalar('number of parameter', count_parameters(model))
+    slack_message(model_sum, config_logging_channel)
 
     ##################
     #   evaluation   #
@@ -163,19 +180,22 @@ def main(config):
     config_evaluation = config["evaluation"]
     # IOU, DICE, F1
     config_metrics = config_evaluation["metrics"]
-    # BCE, IOU, DICE, BCEIOU
+    # IOU, DICE
     config_loss = config_evaluation["loss"]
+    config_segmentation_loss = config_loss["segmentation"]
+    config_classification_loss = config_loss["classification"]
 
     metric_lookup = {"IOU": metric.IOU, "DICE": metric.DICE}
     metrics = [metric_lookup[m["type"]](m["threshold"]) for m in config_metrics]
 
     lossParser = TypeParser(table = {
-        "BCE": nn.BCEWithLogitsLoss,
         "IOU": loss.IOULoss,
         "DICE": loss.DICELoss,
-        "BCEIOU": loss.BCEIOULoss,
+        "BCE": nn.BCEWithLogitsLoss,
     })
-    criterion = lossParser(**config_loss)
+    criterion = loss.MultiOutputLoss(
+        [lossParser(**config_segmentation_loss), lossParser(**config_classification_loss)],
+        **config_loss["param"])
 
     ##################
     #    learning    #

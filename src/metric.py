@@ -63,7 +63,7 @@ class DICE(Metric):
         target = np.reshape(target, (batch_size, -1))
         assert output.shape[1] == target.shape[1]
         assert (output <= 1).all() and (output >= 0).all()
-        assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
+        assert set(np.unique(target)).issubset({0,1})
     
         out = (output > self.threshold).astype(int)
         union = np.logical_or(out, target).sum(axis=-1)
@@ -95,7 +95,7 @@ class Accuracy(Metric):
 
         assert output.shape[0] == target.shape[0]
         assert (output <= 1).all() and (output >= 0).all()
-        assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
+        assert set(np.unique(target)).issubset({0,1})
     
         out = (output > self.threshold).astype(int)
 
@@ -115,7 +115,6 @@ class F1BySegment(Metric):
         [type] -- [description]
     """
 
-    
     def __init__(self, threshold = 0.5):
         super(F1BySegment, self).__init__(threshold)
 

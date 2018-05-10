@@ -31,14 +31,25 @@ from torch.nn import functional as F
 import shutil
 from metric import Accuracy
 
+import collections
 
 def cuda(x, async=False):
     """for use in gpu
     add async=True"""
+
+    if not torch.cuda.is_available():
+        return x
+
+    if isinstance(x, collections.Iterable):
+        if async:
+            return [x_i.cuda(non_blocking=True) for x_i in x]
+        else:
+            return [x_i.cuda() for x_i in x]
+  
     if async:
-        return x.cuda(non_blocking=True) if torch.cuda.is_available() else x
+        return x.cuda(non_blocking=True)
     else:
-        return x.cuda() if torch.cuda.is_available() else x
+        return x.cuda()
 
 class Init():
     def __init__(self, init="xavier_normal"):
@@ -96,11 +107,22 @@ class Trainer():
 
         if not torch.cuda.is_available(): 
             print("CUDA is unavailable. It'll be very slow...")
+
+    def __call__(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
+        """Call trainer
+        Does train, ensemble, etc.. as needed
         
-    def train(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
+        Keyword Arguments:
+            batch_size {int} -- input batch size (default: {16})
+            num_workers {int} -- number of worker threads (data loading) (default: {32})
+            epochs {int} -- total number of epochs (default: {100})
+            log_freq {int} -- frquency of logs (default: {10})
+        """
+
+        
+    def train(self, batch_size, num_workers, epochs, log_freq):
         
         slack_message('train started', '#botlog')
-        # slack_message(self.model.__repr__, '#botlog')
 
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
@@ -125,7 +147,7 @@ class Trainer():
                 self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], checkpoint)
             
             elasped_time = datetime.datetime.now() - start_time
-            eta = start_time + ((elasped_time / (epoch + 1)) * epochs)
+            eta = start_time + ((elasped_time / ((epoch - self.start_epoch) + 1)) * (epochs - self.start_epoch))
 
             log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
             tqdm.write(log)
@@ -134,12 +156,22 @@ class Trainer():
         slack_message('train ended', '#botlog')
 
     def train_once(self, epoch, dataloader, train, writer, checkpoint=True):
+        """one forward, one backward with logging
+        
+        Arguments:
+            epoch {int} -- the current epoch
+            dataloader {Dataloader object} -- the loader to iterate through
+            train {bool} -- true if train mode
+            writer {tensorboardX writer} -- writer log
+        
+        Keyword Arguments:
+            checkpoint {bool} -- save model if true (default: {True})
+        """
         
         losses = AverageMeter()
-        losses2 = AverageMeter()
-        forward_times = AverageMeter()
-        backward_times = AverageMeter()
         data_times = AverageMeter()
+        propagate_times = AverageMeter()
+        
         curr_scores = AverageMeter()
         
         metric_scores = [AverageMeter() for metric in self.metrics]
@@ -149,63 +181,49 @@ class Trainer():
 
         start = time.time()
         for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
-            assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
             data_times.update(time.time() - start)
-
             batch_size = input.size(0)
 
-            t = target.view(batch_size, -1)
-            t = t.sum(dim=1)
-            target2 = (t != 0).float() # 1 is segmentable
-
-            input = cuda(Variable(input))
-            target = cuda(Variable(target))
-            target2 = cuda(Variable(target2))
-            output, output2 = self.model(input)
-            loss = self.criterion(output, target)
-            loss2 = self.criterion2(output2, target2)
-            output = F.sigmoid(output)
-            output2 = F.sigmoid(output2)
-
-            output2 = (output2 >= 0.5).float()
-            # print(output.size(), output2.size())
-            output = output * output2.view(batch_size, 1, 1, 1)          
+            # forward & backward
+            loss, output = self.batch_once(input, target, train)
 
             losses.update(loss.cpu().item(), batch_size)
-            losses2.update(loss2.cpu().item(), batch_size)
-            forward_times.update(time.time() - data_times.val)
-        
-            if train : 
-                self.optimizer.zero_grad()            
-                loss.backward(retain_graph=True)
-                loss2.backward()
-                self.optimizer.step()
+            propagate_times.update(time.time() - data_times.val)
+
+            output2 = output[1]
+            output = output[0]
+
+            target_segmentation, target_classification = target
+
+            del loss
                 
             backward_times.update(time.time() - forward_times.val)
             start = time.time()
 
+            output = F.sigmoid(output)
+            output2 = F.sigmoid(output2)
+
+            output2 = (output2 >= 0.5).float()
+            output = output * output2.view(batch_size, 1, 1, 1)   
+
             for metric, score in zip(self.metrics, metric_scores):
-                score.update(metric.eval(output.data.cpu().numpy(), target.data.cpu().numpy()), batch_size)
+                score.update(metric.eval(output.data.cpu().numpy(), target_segmentation.data.cpu().numpy()), batch_size)
                 curr_scores.update(score.val, batch_size)
 
-            acc_score.update(self.acc.eval(output2.data.cpu().numpy(), target2.data.cpu().numpy()), batch_size)
+            acc_score.update(self.acc.eval(output2.data.cpu().numpy(), target_classification.data.cpu().numpy()), batch_size)
 
             if batch_idx == len(dataloader) - 1: 
                 log = [
                     '[{}]'.format('train' if train else 'val'),
                     'Epoch: [{0}][{1}/{2}]'.format(epoch, batch_idx + 1, len(dataloader)),
-                    'Forward Time {time.val:.3f} ({time.avg:.3f})'.format(time=forward_times),
-                    'Backward Time {time.val:.3f} ({time.avg:.3f})'.format(time=backward_times),
-                    'Data {time.val:.3f} ({time.avg:.3f})'.format(time=data_times),
+                    'Propagate Time {time.val:.3f} ({time.avg:.3f})'.format(time=propagate_times),
+                    'Data Load Time {time.val:.3f} ({time.avg:.3f})'.format(time=data_times),
                     'Loss {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses),
-                    'Loss_acc {loss.val:.4f} ({loss.avg:.4f})'.format(loss=losses2),
                 ]
 
-                writer.add_scalar('time/forward', forward_times.avg, epoch)
-                writer.add_scalar('time/backward', backward_times.avg, epoch)
+                writer.add_scalar('time/propagate', propagate_times.avg, epoch)
                 writer.add_scalar('time/data', data_times.avg, epoch)
-                writer.add_scalar('loss/iou', losses.avg, epoch)
-                writer.add_scalar('loss/acc', losses2.avg, epoch)
+                writer.add_scalar('loss', losses.avg, epoch)
 
                 if train:
                     lr = [group['lr'] for group in self.optimizer.param_groups][0]
@@ -226,11 +244,11 @@ class Trainer():
 
                 writer.add_image('input/pano', make_grid(input.data.cpu().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
                 writer.add_image('input/guideline', make_grid(input.data.cpu().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-                writer.add_image('target', make_grid(target.data.cpu(), normalize=True, scale_each=True), epoch)
+                writer.add_image('target_segmentation', make_grid(target_segmentation.data.cpu(), normalize=True, scale_each=True), epoch)
                 writer.add_image('output', make_grid(output.data.cpu(), normalize=True, scale_each=True), epoch)
                 
-                writer.add_pr_curve('accuracy/iou', target.data.cpu(), output.data.cpu(), epoch)
-                writer.add_pr_curve('accuracy/acc', target2.data.cpu(), output2.data.cpu(), epoch)
+                writer.add_pr_curve('accuracy/iou', target_segmentation.data.cpu(), output.data.cpu(), epoch)
+                writer.add_pr_curve('accuracy/acc', target_classification.data.cpu(), output2.data.cpu(), epoch)
 
                 # writer.add_embedding(embed.data.cpu().view(input.size(0), -1), metadata=None, label_img=output.data.cpu(), global_step=epoch, tag='output')
 
@@ -247,6 +265,21 @@ class Trainer():
             self.scheduler.step()
 
         # todo : for every batch, log hard examples
+
+    def batch_once(self, input, target, train):
+        assert set(np.unique(target[0])).issubset({0,1})
+
+        input, target = cuda(input), cuda(target)
+
+        output = self.model(input)
+        loss = self.criterion(outputs=output, targets=target)
+
+        if train: 
+            self.optimizer.zero_grad()   
+            loss.backward()         
+            self.optimizer.step()
+
+        return loss, output
 
     def search(self):
         pass

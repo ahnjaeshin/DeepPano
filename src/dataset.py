@@ -73,18 +73,20 @@ class PanoSet(Dataset):
 
         input_pano = Image.open(patch.pano_path)
         input_box = Image.open(patch.box_path)
-        target = Image.open(patch.target_path)
+        target_segmentation = Image.open(patch.target_path)
         filepath = patch.input_path
 
-        target = target.point(lambda p: 255 if p > 50 else 0 )
-        assert set(np.unique(target)).issubset({0,255})
+        target_segmentation = target_segmentation.point(lambda p: 255 if p > 50 else 0 )
+        assert set(np.unique(target_segmentation)).issubset({0,255})
 
         if self.transform is not None and doTransform:
-            input_pano, input_box, target = self.transform(input_pano, input_box, target)
+            input_pano, input_box, target_segmentation = self.transform(input_pano, input_box, target_segmentation)
         input = torch.cat([input_box, input_pano], dim=0)
-        assert set(np.unique(target)).issubset({0,1})
+        assert set(np.unique(target_segmentation)).issubset({0,1})
 
-        return (input, target, filepath, index)
+        target_classification = (target_segmentation.sum() != 0).float()
+        
+        return (input, (target_segmentation, target_classification), filepath, index)
 
     def __len__(self):
         return len(self.data)
