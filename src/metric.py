@@ -10,7 +10,7 @@ class Metric():
     def __init__(self, threshold = 0.5):
         self.threshold = threshold
 
-    def eval(self, *measure):
+    def eval(self, output, target):
         raise NotImplementedError
 
     def __repr__(self):
@@ -21,9 +21,9 @@ class IOU(Metric):
     def __init__(self, threshold = 0.5):
         super(IOU, self).__init__(threshold)
 
-    def eval(self, *measure):
-        output = measure[0]
-        target = measure[1]
+    def eval(self, output, target):
+        output = output[0].numpy()
+        target = target[0].numpy()
         batch_size = output.shape[0]
 
         assert output.shape[0] == target.shape[0]
@@ -32,7 +32,7 @@ class IOU(Metric):
         assert output.shape[1] == target.shape[1]
         assert (output <= 1).all() and (output >= 0).all()
         assert (set(np.unique(target)) == {0,1} ) or (set(np.unique(target)) == {0}) or (set(np.unique(target)) == {1})
-    
+
         out = (output > self.threshold).astype(int)
         union = np.logical_or(out, target).sum(axis=-1)
         intersection = np.logical_and(out, target).sum(axis=-1)
@@ -53,9 +53,9 @@ class DICE(Metric):
     def __init__(self, threshold = 0.5):
         super(DICE, self).__init__(threshold)
 
-    def eval(self, *measure):
-        output = measure[0]
-        target = measure[1]
+    def eval(self, output, target):
+        output = output[0].numpy()
+        target = target[0].numpy()
         batch_size = output.shape[0]
 
         assert output.shape[0] == target.shape[0]
@@ -88,9 +88,9 @@ class Accuracy(Metric):
     def __init__(self, threshold = 0.5):
         super(Accuracy, self).__init__(threshold)
 
-    def eval(self, *measure):
-        output = measure[0]
-        target = measure[1]
+    def eval(self, output, target):
+        output = output[1].numpy()
+        target = target[1].numpy()
         batch_size = output.shape[0]
 
         assert output.shape[0] == target.shape[0]
@@ -118,7 +118,7 @@ class F1BySegment(Metric):
     def __init__(self, threshold = 0.5):
         super(F1BySegment, self).__init__(threshold)
 
-    def eval(self, *measure):
+    def eval(self, output, target):
         raise NotImplementedError
 
     def __repr__(self):
