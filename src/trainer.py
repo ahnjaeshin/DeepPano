@@ -33,7 +33,7 @@ from metric import Accuracy
 
 import collections
 
-def cuda(x, async=False):
+def cuda(x, device, async=False):
     """for use in gpu
     add async=True"""
 
@@ -42,14 +42,14 @@ def cuda(x, async=False):
 
     if isinstance(x, collections.Iterable):
         if async:
-            return [x_i.cuda(non_blocking=True) for x_i in x]
+            return [x_i.cuda(device, non_blocking=True) for x_i in x]
         else:
-            return [x_i.cuda() for x_i in x]
+            return [x_i.to(device) for x_i in x]
   
     if async:
-        return x.cuda(non_blocking=True)
+        return x.cuda(device, non_blocking=True)
     else:
-        return x.cuda()
+        return x.to(device)
 
 def render_output(x):
     """sigmoid => cpu
@@ -274,9 +274,9 @@ class Trainer():
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
 
-        # input, target = cuda(input), cuda(target)
-        input = input.to(self.device)
-        target = target[0].to(self.device), target[1].to(self.device)
+        input, target = cuda(input, self.device), cuda(target, self.device, True)
+        # input = input.to(self.device)
+        # target = target[0].to(self.device), target[1].to(self.device)
 
         output = self.model(input)
         loss = self.criterion(outputs=output, targets=target)
