@@ -8,6 +8,7 @@ python3 manage.py decideTarget (updateFileName)
 
 python3 manage.py genStat (fileName)
 
+
 '''
 
 import sys
@@ -50,12 +51,12 @@ def __main__():
             return
         updateFileName = str(sys.argv[2])
         decideTarget(updateFileName)
-	elif command == "genStat":
-		if len(sys.argv) != 3:
-			print('need to input fileName\n')
-			return
-		fileName = str(sys.argv[2])
-		calcStat(fileName)
+    elif command == "genStat":
+        if len(sys.argv) != 3:
+            print('need to input fileName\n')
+            return
+        fileName = str(sys.argv[2])
+        calcStat(fileName)
 
     return
 
