@@ -1,6 +1,4 @@
 """
-
-
 timer interrupt
 """
 
@@ -28,7 +26,7 @@ from typing import NamedTuple
 import pandas as pd
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--config", type=str, required=True, help="path to config file")
+parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
 
 FRONT = (11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43)
 

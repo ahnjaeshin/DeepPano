@@ -169,7 +169,8 @@ class Trainer():
 
             log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
             tqdm.write(log)
-            slack_message(log, '#botlog')
+            if do_log:
+                slack_message(log, '#botlog')
 
         slack_message('train ended', '#botlog')
 
