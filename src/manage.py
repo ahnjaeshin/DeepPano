@@ -2,9 +2,11 @@
 
 python3 manage.py genData (marginType) (inputFileName)
 
-or
 
 python3 manage.py decideTarget (updateFileName)
+
+
+python3 manage.py genStat (fileName)
 
 '''
 
@@ -48,6 +50,12 @@ def __main__():
             return
         updateFileName = str(sys.argv[2])
         decideTarget(updateFileName)
+	elif command == "genStat":
+		if len(sys.argv) != 3:
+			print('need to input fileName\n')
+			return
+		fileName = str(sys.argv[2])
+		calcStat(fileName)
 
     return
 
@@ -414,6 +422,59 @@ def _cropImageWithMargin8(img, coords, imgShape):
 
 def _cropImageWithMargin9(img, coords, imgShape):
     return __cropImageWithSimpleMargin(img, coords, [70, 70, 150, 150], imgShape)
+
+
+def calcStat(fileName):
+
+    try:
+        inputDf = pd.read_csv(fileName)
+    except IOError:
+        print('cannot read input file')
+        return
+
+    sumPixelNum = 0
+    sumPanoPixelValue = 0
+    sumBoxPixelValue = 0
+    varPano = 0
+    varBox = 0
+
+    for idx, row in inputDf.iterrows():
+
+        cropPanoImg = cv2.imread(row['Cropped.Pano.Img'], cv2.IMREAD_GRAYSCALE)
+        cropBoxImg = cv2.imread(row['Cropped.Box.Img'], cv2.IMREAD_GRAYSCALE)
+        h, w = cropBoxImg.shape
+
+        sumPixelNum += h * w
+        sumPanoPixelValue += np.sum(cropPanoImg) / 255
+        sumBoxPixelValue += np.sum(cropBoxImg) / 255
+
+
+    meanPano = sumPanoPixelValue / sumPixelNum
+    meanBox = sumBoxPixelValue / sumPixelNum
+
+    for idx, row in inputDf.iterrows():
+
+        cropPanoImg = cv2.imread(row['Cropped.Pano.Img'], cv2.IMREAD_GRAYSCALE)
+        cropBoxImg = cv2.imread(row['Cropped.Box.Img'], cv2.IMREAD_GRAYSCALE)
+
+        cropPanoImgVar = np.square(cropPanoImg / 255 - meanPano)
+        cropBoxImgVar = np.square(cropBoxImg / 255 - meanBox)
+
+        varPano += np.sum(cropPanoImgVar)
+        varBox += np.sum(cropBoxImgVar)
+
+
+    varPano /= sumPixelNum
+    varBox /= sumPixelNum
+
+    stdPano = math.sqrt(varPano)
+    stdBox = math.sqrt(varBox)
+
+    print("Pano(Mean, STD) = (", meanPano, ",", stdPano, ")")
+    print("Box(Mean, STD) = (", meanBox, ",", stdBox, ")")
+
+    return
+
 
 if __name__ == '__main__':
     __main__()
