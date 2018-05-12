@@ -2,6 +2,7 @@
 import random
 import numpy as np
 import torchvision.transforms.functional as F
+import torchvision.transforms as T
 import torch
 
 def resetSeed(seed):
@@ -18,6 +19,17 @@ class Augment():
 
 
 class TripleAugment(Augment):
+    
+    def __init__(self, transform, size, box_mean, box_std, pano_mean, pano_std):
+        super(TripleAugment, self).__init__(transform)
+
+        self.transform += [
+            ToAll(T.Resize(size)),
+            TargetOnly(Threshold()),
+            ToAll(T.ToTensor()),
+            PanoOnly(T.Normalize((pano_mean, ), (pano_std, ))),
+            BoxOnly(T.Normalize((box_mean, ), (box_std, ))),
+        ]
     
     def __call__(self, input_pano, input_box, target):
         for t in self.transform:
@@ -74,7 +86,7 @@ class TargetOnly(Augment):
         target = self.transform(target)
         return input_pano, input_box, target
 
-class Threshhold():
+class Threshold():
 
     def __init__(self, threshhold = 50):
         self.threshhold = threshhold

@@ -50,16 +50,13 @@ class Filter():
                 return False
         return True
 
-def getAugmentation(augments):
+def getAugmentation(augments, param):
     
     def lookupAugment(category, type, param=None):
         types = {
             "HFlip": transforms.RandomHorizontalFlip,
             "VFlip": transforms.RandomVerticalFlip,
             "Rotate": transforms.RandomRotation,
-            "Resize": transforms.Resize,
-            "ToTensor": transforms.ToTensor,
-            "Threshold": AUG.Threshhold,
         }
 
         categories = {
@@ -73,7 +70,7 @@ def getAugmentation(augments):
         aug_func = types[type]() if param is None else types[type](**param)
         return categories[category](aug_func)
 
-    return AUG.TripleAugment([lookupAugment(**a) for a in augments])
+    return AUG.TripleAugment([lookupAugment(**a) for a in augments], **param)
 
 class TypeParser:
     
@@ -129,13 +126,6 @@ def main(config):
     log = []
     slack_message(json.dumps(config), config_logging_channel)
     
-
-    ##################
-    #  augmentation  #
-    ##################
-    config_augmentation = config["augmentation"]
-    augmentations = {x : getAugmentation(config_augmentation[x]) for x in ('train', 'val')}
-
     ##################
     #     dataset    #
     ##################
@@ -149,6 +139,17 @@ def main(config):
     data = Data(data['Csv.File'], data['Pano.Mean'], data['Pano.Stdev'], data['Box.Mean'], data['Box.Stdev'])    
 
     data_filter = { x : Filter(config_dataset_filter[x]) for x in ('train', 'val')}
+
+    ##################
+    #  augmentation  #
+    ##################
+    config_augmentation = config["augmentation"]
+    augmentation_param = {
+        'size': config_augmentation['size'],
+        'box_mean': data.box_mean, 'pano_mean': data.pano_mean,
+        'box_std': data.box_std, 'pano_std': data.pano_std,
+    }
+    augmentations = {x : getAugmentation(config_augmentation[x], augmentation_param) for x in ('train', 'val')}    
 
     datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
