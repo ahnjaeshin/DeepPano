@@ -140,6 +140,7 @@ class Trainer():
     def train(self, batch_size, num_workers, epochs, log_freq):
         
         slack_message('train started', '#botlog')
+        slack_message('using {} gpus'.format(torch.cuda.device_count()))
 
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
@@ -149,7 +150,6 @@ class Trainer():
                 for x in ['train', 'val']}
 
         if torch.cuda.device_count() > 1:
-            slack_message('using {} gpus'.format(torch.cuda.device_count()))
             self.model = torch.nn.DataParallel(self.model)
 
         if torch.cuda.is_available():
