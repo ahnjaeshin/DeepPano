@@ -68,9 +68,9 @@ class IOU(Metric):
         union = np.logical_or(out, target).sum(axis=-1)
         intersection = np.logical_and(out, target).sum(axis=-1)
 
-        zero_indices = np.where(union != 0)
-        union = union[zero_indices]
-        intersection = intersection[zero_indices]
+        non_zero_indicies = np.where(union != 0)
+        union = union[non_zero_indicies]
+        intersection = intersection[non_zero_indicies]
 
         return np.mean(np.divide(intersection, union))
 
@@ -94,9 +94,9 @@ class DICE(Metric):
         union = np.logical_or(out, target).sum(axis=-1)
         intersection = np.logical_and(out, target).sum(axis=-1)
 
-        zero_indices = np.where(union != 0)
-        union = union[zero_indices]
-        intersection = intersection[zero_indices]
+        non_zero_indicies = np.where(union != 0)
+        union = union[non_zero_indicies]
+        intersection = intersection[non_zero_indicies]
 
         union = union + intersection
         intersection = intersection * 2
@@ -124,9 +124,9 @@ class NEW_IOU(Metric):
         union = np.logical_or(out, target).sum(axis=-1)
         intersection = np.logical_and(out, target).sum(axis=-1)
 
-        zero_indices = np.where(union != 0)
-        union = union[zero_indices]
-        intersection = intersection[zero_indices]
+        non_zero_indicies = np.where(union != 0)
+        union = union[non_zero_indicies]
+        intersection = intersection[non_zero_indicies]
 
         return np.mean(np.divide(intersection, union))
 
@@ -150,9 +150,9 @@ class NEW_DICE(Metric):
         union = np.logical_or(out, target).sum(axis=-1)
         intersection = np.logical_and(out, target).sum(axis=-1)
 
-        zero_indices = np.where(union != 0)
-        union = union[zero_indices]
-        intersection = intersection[zero_indices]
+        non_zero_indicies = np.where(union != 0)
+        union = union[non_zero_indicies]
+        intersection = intersection[non_zero_indicies]
 
         union = union + intersection
         intersection = intersection * 2

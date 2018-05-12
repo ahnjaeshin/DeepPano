@@ -36,7 +36,7 @@ class Filter():
         lookup = {
             "train" : lambda row: row['Train.Val'] == 'train',
             "val" : lambda row: row['Train.Val'] == 'val',
-            "all": lambda row: int(row['Segmentable.Type']) <= 10,
+            "easy": lambda row: int(row['Segmentable.Type']) <= 10,
             "segmentable": lambda row: int(row['Segmentable.Type']) < 10,
             "unsegmentable": lambda row: int(row['Segmentable.Type']) == 10,
             "front-teeth": lambda row: int(row['Tooth.Num.Annot']) in FRONT,

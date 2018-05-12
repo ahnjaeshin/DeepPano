@@ -277,10 +277,12 @@ class Trainer():
             lr = [group['lr'] for group in self.optimizer.param_groups][0]
             write_scalar_log('learning_rate', lr, epoch, log, writer)
 
-            for tag, value in self.model.named_parameters():
+            model = self.model.module if cuda.device_count() > 1 else self.model
+
+            for tag, value in model.named_parameters():
                 tag = tag.replace('.', '/')
-                writer.add_histogram('model/(train)' + tag, value, epoch, bins='doane')
-                writer.add_histogram('model/(train)' + tag + '/grad', value, epoch, bins='doane')
+                writer.add_histogram(tag, value, epoch, bins='doane')
+                writer.add_histogram(tag + '/grad', value, epoch, bins='doane')
 
         for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
             write_scalar_log('metric/arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)

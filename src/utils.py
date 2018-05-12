@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from collections import OrderedDict
 from functools import reduce
+import torch.nn.functional as F
 
 import math
 import numpy as np
