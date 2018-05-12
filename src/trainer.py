@@ -148,13 +148,16 @@ class Trainer():
                                       num_workers=num_workers) 
                 for x in ['train', 'val']}
 
-        if torch.cuda.is_available():
+        if torch.cuda.device_count() > 1:
+            slack_message('using {} gpus'.format(torch.cuda.device_count()))
+            self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count())).cuda()
+            self.criterion = self.criterion.cuda()
+            torch.backends.cudnn.benchmark = True
+        elif torch.cuda.is_available():
             self.model = self.model.cuda()
             self.criterion = self.criterion.cuda()
             torch.backends.cudnn.benchmark = True
-        if torch.cuda.device_count() > 1:
-            print ('using {} gpus'.format(torch.cuda.device_count()))
-            self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count()))
+        
 
         start_time = datetime.datetime.now()
         self.best_score = 0
