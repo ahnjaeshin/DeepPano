@@ -149,8 +149,8 @@ class Trainer():
                 for x in ['train', 'val']}
 
         if torch.cuda.is_available():
-            self.model = cuda(self.model, self.device)
-            self.criterion = cuda(self.criterion, self.device)
+            self.model = self.model.cuda()
+            self.criterion = self.criterion.cuda()
             torch.backends.cudnn.benchmark = True
         if torch.cuda.device_count() > 1:
             self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count()))
