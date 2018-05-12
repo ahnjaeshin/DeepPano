@@ -7,51 +7,18 @@
         "trial": 1,
         "reproducible": true
     },
+
     "augmentation": {
+        "size": [224, 224],
         "train": [
-            {
-                "category": "All",
-                "type": "HFlip"
-            },
-            {
-                "category": "All",
-                "type": "VFlip"
-            },
-            {
-                "category": "All",
-                "type": "Rotate", 
-                "param": { "degrees": [-40, 40] }
-            },
-            {
-                "category": "All",
-                "type": "Resize",
-                "param": { "size" : [224, 224] }
-            },
-            {
-                "category": "Target",
-                "type": "Threshold"
-            },
-            {
-                "category": "All",
-                "type": "ToTensor"
-            }
+            { "category": "All", "type": "HFlip" },
+            { "category": "All", "type": "VFlip" },
+            { "category": "All", "type": "Rotate", 
+                "param": { "degrees": [-40, 40] }}
         ],
-        "val": [
-            {
-                "category": "All",
-                "type": "Resize",
-                "param": { "size" : [224, 224] }
-            },
-            {
-                "category": "Target",
-                "type": "Threshold"
-            },
-            {
-                "category": "All",
-                "type": "ToTensor"
-            }
-        ]
+        "val": []
     },
+
     "dataset": {
         "data-dir": "../data/Stat-DataSet.csv",
         "name": "SecondSet-20180505010809-9-mini",
@@ -64,13 +31,15 @@
             ]
         }
     },
+
     "model": {
         "type": "UNET",
         "param": {
             "bilinear": false,
-            "unit": 4
+            "unit": 1
         }
     },
+
     "evaluation": {
         "loss": {
             "segmentation": {
@@ -87,9 +56,13 @@
         "metrics": [
             { "type": "IOU", "param": {"threshold": 0.5} },
             { "type": "DICE", "param": {"threshold": 0.5} },
-            { "type": "accuracy", "param": {"threshold": 0.5} }
+            { "type": "DICE", "param": {"threshold": 0.8} },
+            { "type": "accuracy", "param": {"threshold": 0.5} },
+            { "type": "NEW_IOU", "param": {"threshold": 0.5, "target_threshold": 0.5}},
+            { "type": "NEW_DICE", "param": {"threshold": 0.5, "target_threshold": 0.5}}
         ]
     },
+
     "learning": {
         "checkpoint": null,
         "weight_init": "he_uniform",
@@ -102,14 +75,15 @@
             }
         },
         "optimizer": {
-            "type": "ADAM",
+            "type": "SGD",
             "param": {
-                "weight_decay": 0,
+                "weight_decay": 1e-5,
                 "lr": 1
             }
         },
         "emsemble": false
     },
+
     "training": {
         "epochs": 1,
         "batch_size": 10,
