@@ -33,7 +33,7 @@ from metric import Accuracy
 
 import collections
 
-def cuda(x, device, async=False):
+def cuda(x, device):
     """for use in gpu
     add async=True"""
 
@@ -41,13 +41,7 @@ def cuda(x, device, async=False):
         return x
 
     if isinstance(x, collections.Iterable):
-        if async:
-            return [x_i.cuda(device, non_blocking=True) for x_i in x]
-        else:
             return [x_i.to(device) for x_i in x]
-  
-    if async:
-        return x.cuda(device, non_blocking=True)
     else:
         return x.to(device)
 
@@ -276,7 +270,7 @@ class Trainer():
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
 
-        input, target = cuda(input, self.device), cuda(target, self.device, True)
+        input, target = cuda(input, self.device), cuda(target, self.device)
         # input = input.to(self.device)
         # target = target[0].to(self.device), target[1].to(self.device)
 
