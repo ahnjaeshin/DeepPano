@@ -153,6 +153,7 @@ class Trainer():
             self.criterion = self.criterion.cuda()
             torch.backends.cudnn.benchmark = True
         if torch.cuda.device_count() > 1:
+            print ('using {} gpus'.format(torch.cuda.device_count()))
             self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count()))
 
         start_time = datetime.datetime.now()
