@@ -55,12 +55,13 @@ def run(experiment):
 
     if experiment.gpu is not None: # and cuda.is_available():
         
-        gpu = experiment.gpu
-        gpu.sort()
-        for idx in gpu:
-            gpu_locks[int(idx)].acquire()
+        if cuda.is_available():
+            gpu = experiment.gpu
+            gpu.sort()
+            for idx in gpu:
+                gpu_locks[int(idx)].acquire()
 
-        env['CUDA_VISIBLE_DEVICES'] = ' '.join(experiment.gpu)
+        env['CUDA_VISIBLE_DEVICES'] = ', '.join(experiment.gpu)
 
     command = ['python3', 'driver.py', '--config', experiment.config]
 
@@ -121,10 +122,11 @@ def done(signum, p):
             if log is not None:
                 log.close()
 
-            gpu = experiment.gpu
-            gpu.sort()
-            for idx in gpu:
-                gpu_locks[int(idx)].release()
+            if cuda.is_available():
+                gpu = experiment.gpu
+                gpu.sort()
+                for idx in gpu:
+                    gpu_locks[int(idx)].release()
         except:
             break
 
