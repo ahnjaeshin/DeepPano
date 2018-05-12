@@ -179,8 +179,10 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
     xmlFileName = row['Xml.File']
     annotFileName = row['Annot.File']
 
+    doAnnot = False if annotFileName == -1 else True
+
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
-    annotPsd = PSDImage.load(annotFileName)
+    annotPsd = PSDImage.load(annotFileName) if doAnnot else None
     
     #if panoImg.shape != annotImg.shape:
     #    print('panoFile and annotFile sizes do not match')
@@ -212,7 +214,23 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
         # Leave it for debugging usage
         inputImg = cv2.copyMakeBorder(cropPanoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
         cv2.addWeighted(cv2.add(cropPanoImg, cropBoxImg), 0.2, inputImg, 0.8, 0, inputImg)
-        
+
+        if not doAnnot:
+
+            cpiName = outImgPath + 'cropPanoImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+            cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+            iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+
+            cv2.imwrite(cpiName, cropPanoImg)
+            cv2.imwrite(cbiName, cropBoxImg)
+            cv2.imwrite(iiName, inputImg)
+
+            newRow = [cpiName, cbiName, iiName, -1, leftMostCoor, cropPanoImg.shape, toothNum,
+                    -1, -1, -1, -1, marginType, -1, -1, -1, row['Train.Val']]
+            outRows.append(newRow)
+
+            continue
+
         maxIOU, sndMaxIOU, boxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
         leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType, imgShape)
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
