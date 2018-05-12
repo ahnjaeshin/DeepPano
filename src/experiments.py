@@ -10,6 +10,8 @@ import fcntl
 from torch import cuda
 from threading import Lock
 import threading
+import shutil
+
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--mode", "-m", type=str, help="add, watch, end", default="add")

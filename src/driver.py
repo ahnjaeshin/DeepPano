@@ -116,7 +116,7 @@ def main(config):
         torch.backends.cudnn.enabled = False # cudnn library 
         torch.backends.cudnn.deterministic = True
 
-    log_dir = 'runs/{title}/{time}_{host}_{trial}/'.format(title=config_logging_title, 
+    log_dir = '../result/runs/{title}/{time}_{host}_{trial}/'.format(title=config_logging_title, 
                                                            time=datetime.datetime.now().strftime('%b%d_%H-%M'), 
                                                            host=socket.gethostname(), 
                                                            trial=config_logging_trial)
@@ -187,6 +187,8 @@ def main(config):
         "IOU": metric.IOU, 
         "DICE": metric.DICE,
         "accuracy": metric.Accuracy,
+        "NEW_IOU": metric.NEW_IOU,
+        "NEW_DICE": metric.NEW_DICE
     })
     metrics = [metricParser(**m) for m in config_metrics]
 

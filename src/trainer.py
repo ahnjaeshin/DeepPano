@@ -31,35 +31,52 @@ from torch.nn import functional as F
 import shutil
 from metric import Accuracy
 
+class Pipeline:
+    def __init__(self, *pipe):
+        self.pipe = pipe
+    
+    def __call__(self, data):
+        for p in self.pipe:
+            data = p(data)
+        return data
 
+def broadcast(func):
+    def broadcast_func(x, *args, **kwargs):
+        if type(x) is list or type(x) is tuple:
+            return [func(x_i, *args, **kwargs) for x_i in x]
+        else:
+            return func(x, *args, **kwargs)
+    return broadcast_func
+
+@broadcast
 def cuda(x, device, async=False):
     """for use in gpu
     add async=True"""
 
     if not torch.cuda.is_available():
         return x
-
-    if type(x) is list or type(x) is tuple:
-        if async:
-            return [x_i.cuda(device, non_blocking=True) for x_i in x]
-        else:
-            return [x_i.to(device) for x_i in x]
-  
     if async:
         return x.cuda(device, non_blocking=True)
-    else:
-        return x.to(device)
+    return x.to(device)
 
-def render_output(x):
-    """sigmoid => cpu
+@broadcast
+def sigmoid(x):
+    """take sigmoid
+    
+    Arguments:
+        x {output} -- output of model
+    """
+    return F.sigmoid(x)
+
+
+@broadcast
+def cpu(x):
+    """cpu
     
     Arguments:
         x {tensor or iterable of tensors}
     """
-    if isinstance(x, collections.Iterable):
-        return [F.sigmoid(x_i).detach().cpu() for x_i in x]
-    else:
-        return F.sigmoid(x).detach().cpu()
+    return x.detach().cpu()
 
 def write_scalar_log(name, val, epoch, log, writer):
     """write log to both slack and tensorboard
@@ -67,6 +84,9 @@ def write_scalar_log(name, val, epoch, log, writer):
 
     log.append('{name} : {val:.5f}'.format(name=name, val=val))
     writer.add_scalar(name, val, epoch)
+
+def render_output(output):
+    pass
 
 class Init():
     def __init__(self, init="xavier_normal"):
@@ -176,7 +196,7 @@ class Trainer():
         slack_message('train ended', '#botlog')
 
     def train_once(self, epoch, dataloader, train, writer, do_log=True):
-        """one forward, one backward with logging
+        """one epoch with logging
         
         Arguments:
             epoch {int} -- the current epoch
@@ -198,9 +218,9 @@ class Trainer():
         result_classification = ClassMeter()
         result_segmentation = ClassMeter()
 
-        input_image = ImageMeter(30)
-        output_image = ImageMeter(30)
-        target_image = ImageMeter(30)
+        input_image = ImageMeter(10)
+        output_image = ImageMeter(10)
+        target_image = ImageMeter(10)
 
         self.model.train(train)
 
@@ -215,12 +235,15 @@ class Trainer():
             else:
                 with torch.no_grad():
                     loss, output = self.batch_once(input, target, train)
-            
 
             losses.update(loss, batch_size)
             del loss
             propagate_times.update(time.time() - data_times.val)            
             start = time.time()
+
+            # output2 = (output[1] >= 0.5).float()
+            # output1 = output[0] * output2.view(batch_size, 1, 1, 1)
+            # output = output1, output2
 
             for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
                 arith_score.update(metric.eval(output, target), batch_size)
@@ -234,26 +257,30 @@ class Trainer():
             output_image.update(output[0])
             target_image.update(target[0])
 
+        if train:
+            self.scheduler.step()
+        else:
+            is_best = self.best_score < curr_scores.avg
+            self.best_score = max(self.best_score, curr_scores.avg)
+            self.save_checkpoint(epoch, is_best)
+
+        # log ()
         log = [
             '[{0}] Epoch: [{1}][{2}/{3}]'.format('train' if train else 'val', epoch, batch_idx + 1, len(dataloader)),
         ]
         write_scalar_log('time/propagate', propagate_times.avg, epoch, log, writer)
         write_scalar_log('time/data', data_times.avg, epoch, log, writer)
         write_scalar_log('loss', losses.avg, epoch, log, writer)
+        write_scalar_log('score', curr_scores.avg, epoch, log, writer)
 
         if train:
             lr = [group['lr'] for group in self.optimizer.param_groups][0]
-            self.scheduler.step()
             write_scalar_log('learning_rate', lr, epoch, log, writer)
 
             for tag, value in self.model.named_parameters():
                 tag = tag.replace('.', '/')
                 writer.add_histogram('model/(train)' + tag, value, epoch, bins='doane')
                 writer.add_histogram('model/(train)' + tag + '/grad', value, epoch, bins='doane')
-        else:
-            is_best = self.best_score < curr_scores.avg
-            self.best_score = max(self.best_score, curr_scores.avg)
-            self.save_checkpoint(epoch, is_best)
 
         for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
             write_scalar_log('metric/arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
@@ -276,8 +303,6 @@ class Trainer():
         assert set(np.unique(target[0])).issubset({0,1})
 
         input, target = cuda(input, self.device), cuda(target, self.device, True)
-        # input = input.to(self.device)
-        # target = target[0].to(self.device), target[1].to(self.device)
 
         output = self.model(input)
         loss = self.criterion(outputs=output, targets=target)
@@ -287,7 +312,7 @@ class Trainer():
             loss.backward()         
             self.optimizer.step()
 
-        return loss.cpu().item(), render_output(output)
+        return loss.cpu().item(), cpu(sigmoid(output))
 
     def search(self):
         pass
@@ -302,7 +327,7 @@ class Trainer():
         else:
             model = self.model
 
-        filename = "../result/checkpoint-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch)
+        filename = "../result/checkpoint/{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch)
 
         state = {
             'epoch': epoch + 1,
@@ -313,7 +338,7 @@ class Trainer():
         }
         torch.save(state, filename)
         if is_best:
-            shutil.copyfile(filename, "../result/checkpoint-best-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch))
+            shutil.copyfile(filename, "../result/checkpoint/best-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch))
 
     def load(self, path):
         if os.path.isfile(path):
