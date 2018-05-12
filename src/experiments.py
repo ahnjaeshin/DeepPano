@@ -21,7 +21,7 @@ JOBS = 'experiments'
 
 
 running = {}
-gpu_locks = [Lock() for c in cuda.device_count()] if cuda.is_available() else None
+gpu_locks = [Lock() for c in range(cuda.device_count())] if cuda.is_available() else None
 # gpu_locks = [Lock(), Lock()]
 
 class Experiment():
