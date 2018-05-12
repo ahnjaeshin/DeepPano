@@ -150,7 +150,7 @@ class Trainer():
 
         if torch.cuda.device_count() > 1:
             slack_message('using {} gpus'.format(torch.cuda.device_count()))
-            self.model = torch.nn.DataParallel(self.model, device_ids=range(torch.cuda.device_count())).cuda()
+            self.model = torch.nn.DataParallel(self.model).cuda()
             self.criterion = self.criterion.cuda()
             torch.backends.cudnn.benchmark = True
         elif torch.cuda.is_available():
