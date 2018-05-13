@@ -65,34 +65,9 @@ def __main__():
     return
 
 
-def decideTarget(updateFileName):
-
-    try:
-        inputDf = pd.read_csv(updateFileName)
-    except IOError:
-        print('cannot read input file')
-        return
-
-    rowNum, colNum = inputDf.shape
-    if colNum != 17:
-        print('wrong number of columns')
-        return
-
-    # TODO: columns check?
-
-    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
-            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
-            'Classification.Target', 'Train.Val']
-    rows = []
-
-    for idx, row in inputDf.iterrows():
-        rows.append(generateTargetImage(row))
-
-    outputDf = pd.DataFrame(rows, columns=outCols)
-    outputDf.to_csv(updateFileName, encoding='utf-8')
-
-    return
+#######################
+#   GenerateDataset   #
+#######################
 
 
 def generateDataset(marginType, autoSeg, segTargetGen, classTargetGen, inputFileName):
@@ -111,14 +86,15 @@ def generateDataset(marginType, autoSeg, segTargetGen, classTargetGen, inputFile
 
     # TODO: columns check?
 
-    timestamp = datetime.datetime.fromtimestamp(time.mktime(time.localtime())).strftime('%Y%m%d%H%M%S')
+    # timestamp = datetime.datetime.fromtimestamp(time.mktime(time.localtime())).strftime('%Y%m%d%H%M%S')
     # TODO: should extract inputFileName from route using regex
-    outputFormat = inputFileName[17:-4] + '-' + timestamp + '-' + str(marginType)
-    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
+    outputFormat = inputFileName[17:-4] + '-' + str(marginType) + '-' + str(autoSeg) + '-' + str(segTargetGen) 
     outImgPath = '../data/metadata/' + outputFormat + '/'
+    outputFormat += '-' + str(classTargetGen)
+    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
     if (os.path.exists(outImgPath)):
         print('directory already exists for outImgPath' + outImgPath)
-        return
+        # return
     else:
         os.mkdir(outImgPath)
 
@@ -138,38 +114,6 @@ def generateDataset(marginType, autoSeg, segTargetGen, classTargetGen, inputFile
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
 
     return
-
-
-def generateTargetImage(row):
-
-    outRow = copy.deepcopy(row.tolist())
-
-    cropAnnotImg = cv2.imread(row['Cropped.Annot.Img'], cv2.IMREAD_GRAYSCALE)
-    targetImg = cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-    segType = row['Segmentable.Type']
-
-    imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
-    if (segType < 0):
-        print('{} segmentable type is error {}. skip.'.format(imgName, segType))
-        trainVal = outRow[-1]
-        outRow = outRow[1:-2]
-        outRow.append(-1)
-        outRow.append(trainVal)
-        return outRow
-
-    if (segType >= 10): # not segmentable
-        targetImg = np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-
-    tiName = re.sub('cropAnnotImg', 'targetImg', row['Cropped.Annot.Img'])
-    cv2.imwrite(tiName, targetImg)
-
-    print('{} segmentable type is {}. gen target Img.'.format(imgName, segType))
-
-    trainVal = outRow[-1]
-    outRow = outRow[1:-2]
-    outRow.append(tiName)
-    outRow.append(trainVal)
-    return outRow
 
 
 def generateDatasetForEachFile(marginType, autoSeg, segTargetGen, classTargetGen, outImgPath, row):
@@ -413,6 +357,7 @@ def decideSegType(autoSeg, maxIOU, sndMaxIOU, boxIOU):
         return 5 # half inclusive
     return -3
 
+
 def genCoordsFromTooth(tooth):
     return [(int(coord.attrib['X']), int(coord.attrib['Y'])) for coord in tooth]
 
@@ -475,6 +420,78 @@ def _cropImageWithMargin8(img, coords, imgShape):
 
 def _cropImageWithMargin9(img, coords, imgShape):
     return __cropImageWithSimpleMargin(img, coords, [70, 70, 150, 150], imgShape)
+
+
+####################
+#   DecideTarget   #
+####################
+
+
+def decideTarget(updateFileName):
+
+    try:
+        inputDf = pd.read_csv(updateFileName)
+    except IOError:
+        print('cannot read input file')
+        return
+
+    rowNum, colNum = inputDf.shape
+    if colNum != 17:
+        print('wrong number of columns')
+        return
+
+    # TODO: columns check?
+
+    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
+            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
+            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
+            'Classification.Target', 'Train.Val']
+    rows = []
+
+    for idx, row in inputDf.iterrows():
+        rows.append(generateTargetImage(row))
+
+    outputDf = pd.DataFrame(rows, columns=outCols)
+    outputDf.to_csv(updateFileName, encoding='utf-8')
+
+    return
+
+
+def generateTargetImage(row):
+
+    outRow = copy.deepcopy(row.tolist())
+
+    cropAnnotImg = cv2.imread(row['Cropped.Annot.Img'], cv2.IMREAD_GRAYSCALE)
+    targetImg = cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+    segType = row['Segmentable.Type']
+
+    imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
+    if (segType < 0):
+        print('{} segmentable type is error {}. skip.'.format(imgName, segType))
+        trainVal = outRow[-1]
+        outRow = outRow[1:-2]
+        outRow.append(-1)
+        outRow.append(trainVal)
+        return outRow
+
+    if (segType >= 10): # not segmentable
+        targetImg = np.zeros(cropAnnotImg.shape, dtype=np.uint8)
+
+    tiName = re.sub('cropAnnotImg', 'targetImg', row['Cropped.Annot.Img'])
+    cv2.imwrite(tiName, targetImg)
+
+    print('{} segmentable type is {}. gen target Img.'.format(imgName, segType))
+
+    trainVal = outRow[-1]
+    outRow = outRow[1:-2]
+    outRow.append(tiName)
+    outRow.append(trainVal)
+    return outRow
+
+
+################
+#   CalcStat   #
+################
 
 
 def calcStat(fileName):
