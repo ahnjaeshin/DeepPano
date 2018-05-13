@@ -1,6 +1,6 @@
 '''
 
-python3 manage.py genData (marginType) (inputFileName)
+python3 manage.py genData (marginType) (autoSeg) (segTargetGen) (classTargetGen) (inputFileName)
 
 
 python3 manage.py decideTarget (updateFileName)
@@ -29,23 +29,26 @@ def __main__():
     
     if len(sys.argv) < 2:
         print('need to input commands\n',
-                'genData (marginType) (autoSeg) (targetGen) (inputFileName), or\n',
-                'decideTarget (updateFileName)')
+                'genData (marginType) (autoSeg) (segTargetGen) (classTargetGen)',
+                '(inputFileName), or\n decideTarget (updateFileName), or\n',
+                'genStat (fileName)')
         return
     
     command = str(sys.argv[1])
     
     if command == "genData":
-        if len(sys.argv) != 6:
+        if len(sys.argv) != 7:
             # autoSeg: 0 (don't autogenerate) 1 (auto - simple) 2 (auto - complex)
-            # targetGen: 0 (don't generate) 1 (auto - simple) 2 (auto - complex)
-            print('need to input marginType autoSeg targetGen and inputFileName\n')
+            # segTargetGen: 0 (don't generate) 1 (auto - simple) 2 (auto - complex)
+            # classTargetGen: 0 (segType) 1 (seg / unseg) 2 (complex)
+            print('need to input marginType autoSeg segTargetGen classTargetGen inputFileName\n')
             return
         marginType = int(sys.argv[2])
         autoSeg = int(sys.argv[3])
-        targetGen = int(sys.argv[4])
-        inputFileName = str(sys.argv[5])
-        generateDataset(marginType, autoSeg, targetGen, inputFileName)
+        segTargetGen = int(sys.argv[4])
+        classTargetGen = int(sys.argv[5])
+        inputFileName = str(sys.argv[6])
+        generateDataset(marginType, autoSeg, segTargetGen, classTargetGen, inputFileName)
     elif command == "decideTarget":
         if len(sys.argv) != 3:
             print('need to input updateFileName\n')
@@ -71,7 +74,7 @@ def decideTarget(updateFileName):
         return
 
     rowNum, colNum = inputDf.shape
-    if colNum != 16:
+    if colNum != 17:
         print('wrong number of columns')
         return
 
@@ -80,7 +83,7 @@ def decideTarget(updateFileName):
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
             'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
-            'Train.Val']
+            'Classification.Target', 'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
@@ -92,7 +95,7 @@ def decideTarget(updateFileName):
     return
 
 
-def generateDataset(marginType, autoSeg, targetGen, inputFileName):
+def generateDataset(marginType, autoSeg, segTargetGen, classTargetGen, inputFileName):
     
     try:
         inputDf = pd.read_csv(inputFileName)
@@ -124,11 +127,12 @@ def generateDataset(marginType, autoSeg, targetGen, inputFileName):
     outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
             'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
-            'Train.Val']
+            'Classification.Target', 'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
-        rows.extend(generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row))
+        rows.extend(generateDatasetForEachFile(marginType, autoSeg, segTargetGen, classTargetGen,
+                    outImgPath, row))
    
     outputDf = pd.DataFrame(rows, columns=outCols)
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
@@ -168,8 +172,7 @@ def generateTargetImage(row):
     return outRow
 
 
-
-def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
+def generateDatasetForEachFile(marginType, autoSeg, segTargetGen, classTargetGen, outImgPath, row):
 
     outRows = []
 
@@ -236,7 +239,8 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
         cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
 
         segType = -1 if autoSeg == 0 else decideSegType(autoSeg, maxIOU, sndMaxIOU, boxIOU)
-        targetImg = None if targetGen == 0 else genTargetImage(targetGen, segType, maxIOU, cropAnnotImg, cropBoxImg)
+        targetImg = None if segTargetGen == 0 else genTargetImage(segTargetGen, segType, maxIOU, cropAnnotImg, cropBoxImg)
+        classificationType = 'None' if classTargetGen == 0 else genClassTarget(classTargetGen, segType)
 
         # TODO: Wrong tooth number check?
 
@@ -245,18 +249,18 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
         cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
         iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
         caiName = outImgPath + 'cropAnnotImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-        tiName = -1 if targetGen == 0 else re.sub('cropPanoImg', 'targetImg', cpiName)
+        tiName = -1 if segTargetGen == 0 else re.sub('cropPanoImg', 'targetImg', cpiName)
 
         # export images
         cv2.imwrite(cpiName, cropPanoImg)
         cv2.imwrite(cbiName, cropBoxImg)
         cv2.imwrite(iiName, inputImg)
         cv2.imwrite(caiName, cropAnnotImg)
-        if targetGen > 0:
+        if segTargetGen > 0:
             cv2.imwrite(tiName, targetImg)
 
         # for debugging purpose only
-        if targetGen > 0:
+        if segTargetGen > 0:
             allImg = cv2.copyMakeBorder(inputImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
             cv2.addWeighted(cv2.add(inputImg, targetImg), 0.6, allImg, 0.4, 0, allImg)
             aiName = re.sub('cropPanoImg', 'allImg', cpiName)
@@ -264,7 +268,8 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
 
         # write row for .csv
         newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
-                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, segType, tiName, row['Train.Val']]
+                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, segType, tiName,
+                classificationType, row['Train.Val']]
         outRows.append(newRow)
 
     return outRows
@@ -347,23 +352,51 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
     return ((maxIOU, sndMaxIOU, boxIOU, 0, maxIOULayerImg) if maxIOULayer is None
             else (maxIOU, sndMaxIOU, boxIOU, maxIOULayer.name, maxIOULayerImg))
 
-def genTargetImage(targetGen, segType, maxIOU, cropAnnotImg, cropBoxImg):
-    if targetGen == 0:
+
+def genTargetImage(segTargetGen, segType, maxIOU, cropAnnotImg, cropBoxImg):
+    if segTargetGen == 0:
         return None
-    if targetGen == 1:
+    if segTargetGen == 1:
         if segType < 10:
             return cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
         return np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-    if targetGen == 2:
+    if segTargetGen == 2:
         intersectionImg = cv2.bitwise_and(cropAnnotImg, cropBoxImg)
         intersectionArea = np.sum(intersectionImg == 255)
         teethArea = np.sum(cropAnnotImg == 255)
+        if teethArea == 0:
+            return np.zeros(cropAnnotImg.shape, dtype=np.uint8)
         newMaxIOU = intersectionArea / teethArea
         #if maxIOU < 0.05 or (maxIOU / newMaxIOU) < 0.67:
         if maxIOU < 0.12:
             return np.zeros(cropAnnotImg.shape, dtype=np.uint8)
         return cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
     return None
+
+
+def genClassTarget(classTargetGen, segType):
+    if classTargetGen == 0:
+        return 'None'
+    if classTargetGen == 1:
+        if segType < 0: # error
+            return 'Error'
+        if segType < 10: # segmentable
+            return 'Seg'
+        return 'Unseg' # unsegmentable
+    if classTargetGen == 2:
+        if segType < 0: # error
+            return 'Error'
+        if segType < 10: # segmentable
+            return 'Seg'
+        if segType == 10: # No teeth
+            return 'NoTeeth'
+        if segType == 11: # Half Half
+            return 'HalfHalf'
+        if segType == 12: # Two teeth
+            return 'TwoTeeth'
+        return 'Error' # currently do not support > 12
+    return 'Error'
+
 
 def decideSegType(autoSeg, maxIOU, sndMaxIOU, boxIOU):
     if autoSeg == 0:
