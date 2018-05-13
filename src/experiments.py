@@ -88,13 +88,14 @@ def run(experiment):
 
     if experiment.log is None:
         p = subprocess.Popen(command, env=env, universal_newlines=True)
-        slack_message('new experiment pid({})'.format(p.pid))
-        running[p.pid] = experiment, None
+        running[p.pid] = experiment, None, p
     else:
         log = open(experiment.log, 'w')
         p = subprocess.Popen(command, env=env, universal_newlines=True, stdout=log)
-        slack_message('new experiment pid({})'.format(p.pid))
-        running[p.pid] = experiment, log
+        running[p.pid] = experiment, log, p
+    
+    slack_message('new experiment pid({})'.format(p.pid))
+    print('new experiment pid({})'.format(p.pid))
 
 
 def watch():
@@ -110,7 +111,19 @@ def watch():
                 if e == 'end':
                     exit(0)
 
-                print("New experiment start: {}".format(experimentNum))
+                if 'delete' in e:
+                    pid = int(e.split(':')[1])
+                    if pid not in running:
+                        print("process with pid {} not found".format(pid))
+                        return
+                    
+                    _, _, p = running[pid]
+                    p.kill()
+                    slack_message("process with pid {} deleted".format(pid))
+                    print("process with pid {} deleted".format(pid))
+                    return
+
+                print("New experiment queued: {}".format(experimentNum))
                 experimentNum += 1
             
                 experiment = Experiment.makeExperiment(e)
@@ -136,7 +149,7 @@ def done(signum, p):
     while True:
         try:
             pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED)
-            experiment, log = running[pid]
+            experiment, log, p = running[pid]
 
             print('pid {} gpu {}----------'.format(pid, experiment.gpu))
 
@@ -160,7 +173,10 @@ def done(signum, p):
     
 
 def delete(pid):
-    pass
+    with open(JOBS, 'w', ) as fifo:
+        fifo.write('delete:{}'.format(pid))
+
+    
 
 def main(args):
     signal.signal(signal.SIGCHLD, done)
