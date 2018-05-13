@@ -8,7 +8,8 @@ import signal
 import argparse
 import fcntl
 from torch import cuda
-from threading import Lock
+# import cuda # for testing
+from threading import Lock, Condition
 import threading
 import shutil
 
@@ -18,13 +19,14 @@ parser.add_argument("--mode", "-m", type=str, help="add, watch, end", default="a
 parser.add_argument("--gpu", "-g", nargs='+', help="gpu ids to use")
 parser.add_argument("--config", "-c", type=str, help="path to config file")
 parser.add_argument("--log", "-l", type=str, help="optional stdout")
+parser.add_argument("--pid", "-p", type=int, help="if delete process")
 
 JOBS = 'experiments'
 
 
 running = {}
-gpu_locks = [Lock() for c in range(cuda.device_count())] if cuda.is_available() else None
-# gpu_locks = [Lock(), Lock()]
+gpu_lock = Condition()
+gpu_acquired = [False for idx in range(cuda.device_count())] if cuda.is_available() else None
 
 class Experiment():
     """a experiment object
@@ -44,24 +46,41 @@ class Experiment():
     @staticmethod
     def makeExperiment(e):
         gpu, config, log = e.split('|')
-        gpu = gpu.split(',')
+        if gpu != "None":
+            gpu = gpu.split(',')
         return Experiment(gpu, config, log)
 
     def __str__(self):
-        gpu = ','.join(self.gpu)
+        gpu = self.gpu
+        if gpu is not None:
+            gpu = ','.join(self.gpu)
         return "{}|{}|{}\n".format(gpu, self.config, self.log)
         
+def canRunGPU(gpu):
+    for idx in gpu:
+        if gpu_acquired[int(idx)]:
+            return False
+    return True
+    
 def run(experiment):
     
     env = os.environ.copy()
-
+    
     if experiment.gpu is not None: # and cuda.is_available():
         
         if cuda.is_available():
             gpu = experiment.gpu
             gpu.sort()
+
+            gpu_lock.acquire()
+
+            while not canRunGPU(gpu):
+                gpu_lock.wait()
+
             for idx in gpu:
-                gpu_locks[int(idx)].acquire()
+                gpu_acquired[int(idx)] = True
+        
+            gpu_lock.release()
 
         env['CUDA_VISIBLE_DEVICES'] = ', '.join(experiment.gpu)
 
@@ -116,21 +135,32 @@ def done(signum, p):
 
     while True:
         try:
-            pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED|os.WCONTINUED)
+            pid, status = os.waitpid(-1, os.WNOHANG|os.WUNTRACED)
             experiment, log = running[pid]
 
             print('pid {} gpu {}----------'.format(pid, experiment.gpu))
-            
+
             if log is not None:
                 log.close()
 
             if cuda.is_available():
                 gpu = experiment.gpu
                 gpu.sort()
+                
+                gpu_lock.acquire()
+
                 for idx in gpu:
-                    gpu_locks[int(idx)].release()
+                    gpu_acquired[int(idx)] = False
+                
+                gpu_lock.notifyAll()
+                gpu_lock.release()
         except:
             break
+
+    
+
+def delete(pid):
+    pass
 
 def main(args):
     signal.signal(signal.SIGCHLD, done)
@@ -145,6 +175,8 @@ def main(args):
         watch()
     elif args.mode == 'add':
         add(args)
+    elif args.mode == 'delete':
+        delete(args.pid)
     elif args.mode == 'end':
         end()
     else:
