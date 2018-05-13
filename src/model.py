@@ -76,7 +76,7 @@ class BranchBlock(nn.Module):
         out += self.shortcut(x)
         out = self.elu2(out)
         out = self.dropout(out)
-        return torch.mean(out.view(out.size()[0], -1), dim=1)
+        return torch.mean(out.view(out.size(0), out.size(1), -1), dim=2)
 
 class DownBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
@@ -124,9 +124,9 @@ class UNet(nn.Module):
         self.up2 = UpBlock(self.UNIT*4, self.UNIT*4, self.UNIT*2, bilinear)
         self.up3 = UpBlock(self.UNIT*2, self.UNIT*2, self.UNIT, bilinear)
         self.up4 = UpBlock(self.UNIT, self.UNIT, self.UNIT, bilinear)
-        self.out_conv = OutBlock(self.UNIT, classes)
+        self.out_conv = OutBlock(self.UNIT, 1)
         self.dropout2 = nn.Dropout()
-        self.branch = BranchBlock(self.UNIT*8, 1)
+        self.branch = BranchBlock(self.UNIT*8, classes)
 
     def forward(self, x):
         x1 = self.in_conv(x) # (2, 224, 224) => (16, 112, 122)

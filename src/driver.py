@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 
 import loss
 import metric
-from dataset import PanoSet
+from dataset import PanoSet, CLASSES
 from model import UNet
 from torchvision import transforms
 from trainer import Trainer
@@ -38,10 +38,10 @@ class Filter():
             "val" : lambda row: row['Train.Val'] == 'val',
             "easy": lambda row: int(row['Segmentable.Type']) <= 10,
             "segmentable": lambda row: int(row['Segmentable.Type']) < 10,
-            "unsegmentable": lambda row: int(row['Segmentable.Type']) == 10,
+            "unsegmentable": lambda row: int(row['Segmentable.Type']) >= 10,
             "front-teeth": lambda row: int(row['Tooth.Num.Annot']) in FRONT,
         }
-        self.func = [lambda row: row['Target.Img'] != '-1']
+        self.func = [lambda row: row['Classification.Target'] != 'Error']
         self.func += [lookup[f] for f in filters]
 
     def __call__(self, row):
@@ -154,6 +154,7 @@ def main(config):
     datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
+
     log.append(str(datasets['train']))
     log.append(str(datasets['val']))
 
@@ -162,7 +163,7 @@ def main(config):
     ##################
     config_model = config["model"]
 
-    model = UNet(2, 1, **config_model["param"])
+    model = UNet(2, len(CLASSES), **config_model["param"])
     # dummy_input = torch.rand(1, 2, 128, 128)
     # writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
@@ -187,15 +188,13 @@ def main(config):
         "IOU": metric.IOU, 
         "DICE": metric.DICE,
         "accuracy": metric.Accuracy,
-        "NEW_IOU": metric.NEW_IOU,
-        "NEW_DICE": metric.NEW_DICE
     })
     metrics = [metricParser(**m) for m in config_metrics]
 
     lossParser = TypeParser(table = {
         "IOU": loss.IOULoss,
         "DICE": loss.DICELoss,
-        "BCE": nn.BCEWithLogitsLoss,
+        "CE": nn.CrossEntropyLoss,
     })
     criterion = loss.MultiOutputLoss(
         [lossParser(**config_segmentation_loss), lossParser(**config_classification_loss)],

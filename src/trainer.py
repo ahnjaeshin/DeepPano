@@ -219,8 +219,8 @@ class Trainer():
         result_segmentation = ClassMeter()
 
         input_image = ImageMeter(10)
-        output_image = ImageMeter(10)
-        target_image = ImageMeter(10)
+        segmentation_output_image = ImageMeter(10)
+        segmentation_target_image = ImageMeter(10)
 
         self.model.train(train)
 
@@ -241,10 +241,6 @@ class Trainer():
             propagate_times.update(time.time() - data_times.val)            
             start = time.time()
 
-            # output2 = (output[1] >= 0.5).float()
-            # output1 = output[0] * output2.view(batch_size, 1, 1, 1)
-            # output = output1, output2
-
             for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
                 arith_score.update(metric.eval(output, target), batch_size)
                 geo_score.update(metric.eval(output, target), batch_size)
@@ -254,8 +250,8 @@ class Trainer():
             result_segmentation.update(output[0], target[0])
 
             input_image.update(input)
-            output_image.update(output[0])
-            target_image.update(target[0])
+            segmentation_output_image.update(output[0])
+            segmentation_target_image.update(target[0])
 
         if train:
             self.scheduler.step()
@@ -277,7 +273,7 @@ class Trainer():
             lr = [group['lr'] for group in self.optimizer.param_groups][0]
             write_scalar_log('learning_rate', lr, epoch, log, writer)
 
-            model = self.model.module if cuda.device_count() > 1 else self.model
+            model = self.model.module if torch.cuda.device_count() > 1 else self.model
 
             for tag, value in model.named_parameters():
                 tag = tag.replace('.', '/')
@@ -293,13 +289,13 @@ class Trainer():
         if do_log:
             slack_message("\n".join(log), '#botlog')
 
-        writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('input/guideline', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('target/segmentation', make_grid(target_image.images, normalize=True, scale_each=True), epoch)
-        writer.add_image('output', make_grid(output_image.images, normalize=True, scale_each=True), epoch)
+        writer.add_image('pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('segmentation/target', make_grid(segmentation_target_image.images, normalize=True, scale_each=True), epoch)
+        writer.add_image('segmentation/output', make_grid(segmentation_output_image.images, normalize=True, scale_each=True), epoch)
         
-        writer.add_pr_curve('accuracy/segmentation', result_classification.targets, result_classification.outputs, epoch)
-        writer.add_pr_curve('accuracy/classification', result_segmentation.targets, result_segmentation.outputs, epoch)
+        writer.add_pr_curve('segmentation', result_classification.targets, result_classification.outputs, epoch)
+        writer.add_pr_curve('classification', result_segmentation.targets, result_segmentation.outputs, epoch)
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
@@ -314,7 +310,27 @@ class Trainer():
             loss.backward()         
             self.optimizer.step()
 
-        return loss.cpu().item(), cpu(sigmoid(output))
+        output = F.sigmoid(output[0]), torch.argmax(F.softmax(output[1], dim=1), dim=1)
+        # output1 (batch_size, W, H)  
+        # output2 (batch_size, )
+
+        return loss.cpu().item(), cpu(output)
+
+    # def render_output(self, output):
+    #     """output rendered
+        
+    #     Arguments:
+    #         output {list of tensors} -- (segmentation output, classification output)
+        
+    #     Returns:
+    #         output -- list of tensors
+    #     """
+
+    #     output1, output2 = output
+    #     output2 = torch.argmax(output2, dim=1)
+    #     output1 = output1 * output2.reshape(output2.shape[0], output2.shape[1], 1, 1)
+    #     output = output1, output2
+    #     return output
 
     def search(self):
         pass

@@ -9,8 +9,8 @@ def isIter(x):
 
 def numpy(func):
     def metric(self, output, target):
-        output = [o.numpy() for o in output] if isIter(output) else output
-        target = [t.numpy() for t in target] if isIter(target) else target
+        output = [o.numpy() for o in output] if isIter(output) else output.numpy()
+        target = [t.numpy() for t in target] if isIter(target) else target.numpy()
         return func(self, output, target)
     return metric
 
@@ -26,16 +26,6 @@ def classification(func):
     def metric(self, output, target):
         return func(self, output[1], target[1])
     return metric
-
-def render(func):
-    def render_output(self, output, target):
-        output1, output2 = output
-        output2 = (output2 >= 0.5).astype(int)
-        output1 = output1 * output2.reshape(output2.shape[0], 1, 1, 1)
-        output = output1, output2
-
-        return func(self, output, target)
-    return render_output
 
 class Metric():
     """data stored as list of tuples
@@ -106,62 +96,6 @@ class DICE(Metric):
     def __repr__(self):
         return 'DICE({})'.format(self.threshold)
 
-class NEW_IOU(Metric):
-    def __init__(self, threshold = 0.5, target_threshold = 0.5):
-        super(NEW_IOU, self).__init__(threshold)
-        self.target_threshold = target_threshold
-
-    @numpy
-    @render
-    @segmentation
-    def eval(self, output, target):
-
-        assert output.shape == target.shape
-        assert (output <= 1).all() and (output >= 0).all()
-        assert set(np.unique(target)).issubset({0,1})
-
-        out = (output > self.threshold).astype(int)
-        union = np.logical_or(out, target).sum(axis=-1)
-        intersection = np.logical_and(out, target).sum(axis=-1)
-
-        non_zero_indicies = np.where(union != 0)
-        union = union[non_zero_indicies]
-        intersection = intersection[non_zero_indicies]
-
-        return np.mean(np.divide(intersection, union))
-
-    def __repr__(self):
-        return 'NEW_IOU({}, target:{})'.format(self.threshold, self.target_threshold)
-
-class NEW_DICE(Metric):
-    def __init__(self, threshold = 0.5, target_threshold = 0.5):
-        super(NEW_DICE, self).__init__(threshold)
-        self.target_threshold = target_threshold
-
-    @numpy
-    @render
-    @segmentation
-    def eval(self, output, target):
-        assert output.shape == target.shape
-        assert (output <= 1).all() and (output >= 0).all()
-        assert set(np.unique(target)).issubset({0,1})
-        
-        out = (output > self.threshold).astype(int)
-        union = np.logical_or(out, target).sum(axis=-1)
-        intersection = np.logical_and(out, target).sum(axis=-1)
-
-        non_zero_indicies = np.where(union != 0)
-        union = union[non_zero_indicies]
-        intersection = intersection[non_zero_indicies]
-
-        union = union + intersection
-        intersection = intersection * 2
-
-        return np.mean(np.divide(intersection, union))
-
-    def __repr__(self):
-        return 'NEW_DICE({}, target:{})'.format(self.threshold, self.target_threshold)
-
 class Accuracy(Metric):
     
     def __init__(self, threshold = 0.5):
@@ -172,12 +106,7 @@ class Accuracy(Metric):
     def eval(self, output, target):
 
         assert output.shape[0] == target.shape[0]
-        assert (output <= 1).all() and (output >= 0).all()
-        assert set(np.unique(target)).issubset({0,1})
-    
-        out = (output > self.threshold).astype(int)
-
-        return np.mean((out == target).astype(int))
+        return np.mean((output == target).astype(int))
 
     def __repr__(self):
         return 'accuracy({})'.format(self.threshold)

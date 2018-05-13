@@ -28,12 +28,16 @@ def isImageFile(filename):
 
 def getAbsoluteAddress(filedir):
     return os.path.join(os.path.dirname(__file__), filedir)
+    
 
 class Patch(NamedTuple):
     pano_path: str
     box_path: str
     input_path: str
     target_path: str
+    target_class: str
+
+CLASSES = set()
 
 class PanoSet(Dataset):
     """
@@ -53,12 +57,18 @@ class PanoSet(Dataset):
                 box_path = getAbsoluteAddress(row['Cropped.Box.Img'])
                 input_path = getAbsoluteAddress(row['Cropped.Input.Img'])
                 target_path = getAbsoluteAddress(row['Target.Img'])
+                target_class = row['Classification.Target']
+                
+                CLASSES.add(target_class)
 
-                data.append(Patch(pano_path, box_path, input_path, target_path))
+                data.append(Patch(pano_path, box_path, input_path, target_path, target_class))
         
         self.data = data
         self.meta_data = df
         self.transform = transform
+        # self.classes = ('Seg', 'NoTeeth', 'HalfHalf', 'TwoTeeth')
+        self.class_to_idx = {x: idx for idx, x in enumerate(CLASSES)}
+        self.idx_to_class = {idx: x for idx, x in enumerate(CLASSES)}
 
     def __getitem__(self, index, doTransform=True):
         """
@@ -84,7 +94,7 @@ class PanoSet(Dataset):
         input = torch.cat([input_box, input_pano], dim=0)
         assert set(np.unique(target_segmentation)).issubset({0,1})
 
-        target_classification = (target_segmentation.sum() != 0).float()
+        target_classification = self.class_to_idx[patch.target_class]
         
         return (input, (target_segmentation, target_classification), filepath, index)
 

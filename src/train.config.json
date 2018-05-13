@@ -36,7 +36,7 @@
         "type": "UNET",
         "param": {
             "bilinear": false,
-            "unit": 1
+            "unit": 4
         }
     },
 
@@ -47,7 +47,7 @@
                 "param": {}
             },
             "classification": {
-                "type": "BCE",
+                "type": "CE",
                 "param": {}
             },
             "param": {}
@@ -57,9 +57,7 @@
             { "type": "IOU", "param": {"threshold": 0.5} },
             { "type": "DICE", "param": {"threshold": 0.5} },
             { "type": "DICE", "param": {"threshold": 0.8} },
-            { "type": "accuracy", "param": {"threshold": 0.5} },
-            { "type": "NEW_IOU", "param": {"threshold": 0.5, "target_threshold": 0.5}},
-            { "type": "NEW_DICE", "param": {"threshold": 0.5, "target_threshold": 0.5}}
+            { "type": "accuracy", "param": {"threshold": 0.5} }
         ]
     },
 
