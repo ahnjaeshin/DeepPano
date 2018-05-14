@@ -147,9 +147,12 @@ def main(config):
     config_augmentation = config["augmentation"]
     augmentation_param = {
         'size': config_augmentation['size'],
-        'box_mean': data.box_mean, 'pano_mean': data.pano_mean,
-        'box_std': data.box_std, 'pano_std': data.pano_std,
+        'box_mean': float(data.box_mean), 'pano_mean': float(data.pano_mean),
+        'box_std': float(data.box_std), 'pano_std': float(data.pano_std),
     }
+
+    print(augmentation_param)
+
     augmentations = {x : getAugmentation(config_augmentation[x], augmentation_param) for x in ('train', 'val')}    
 
     datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])

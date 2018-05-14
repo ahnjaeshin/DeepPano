@@ -20,7 +20,7 @@ class IOULoss(_WeightedLoss):
         assert output.size() == target.size()
         assert (output <= 1).all() and (output >= 0).all()
 
-        smooth = 1
+        smooth = 1e-15
 
         intersection = (output * target).sum(dim=-1)
         union = output.sum(dim=-1) + target.sum(dim=-1)
@@ -58,7 +58,7 @@ class DICELoss(_WeightedLoss):
         assert output.size() == target.size()
         assert (output <= 1).all() and (output >= 0).all()
 
-        smooth = 1
+        smooth = 1e-15
 
         intersection = (output * target).sum(dim=-1)
         union = output.sum(dim=-1) + target.sum(dim=-1)

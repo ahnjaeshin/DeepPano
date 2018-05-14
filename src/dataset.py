@@ -113,11 +113,11 @@ class PanoSet(Dataset):
         target_major = target_major.point(lambda p: 255 if p > 50 else 0)
         target_minor = target_minor.point(lambda p: 255 if p > 50 else 0)
 
-        target = Image.merge("LA",(target_major,target_minor))
-
         if self.transform is not None and doTransform:
-            input_pano, input_box, target = self.transform(input_pano, input_box, target)
+            input_pano, input_box, target_major, target_minor = self.transform(input_pano, input_box, target_major, target_minor)
+            
         input = torch.cat([input_box, input_pano], dim=0)
+        target = torch.cat([target_major, target_minor], dim=0)
 
         assert set(np.unique(target)).issubset({0,1})
       

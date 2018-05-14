@@ -14,7 +14,7 @@ class Augment():
     def __init__(self, transform):
         self.transform = transform
 
-    def __call__(self, input_pano, input_box, target):
+    def __call__(self, input_pano, input_box, target_major, target_minor):
         raise NotImplementedError
 
 
@@ -31,16 +31,16 @@ class TripleAugment(Augment):
             BoxOnly(T.Normalize((box_mean, ), (box_std, ))),
         ]
     
-    def __call__(self, input_pano, input_box, target):
+    def __call__(self, input_pano, input_box, target_major, target_minor):
         for t in self.transform:
-            input_pano, input_box, target = t(input_pano, input_box, target)
+            input_pano, input_box, target_major, target_minor = t(input_pano, input_box, target_major, target_minor)
 
-        return input_pano, input_box, target
+        return input_pano, input_box, target_major, target_minor
 
 
 class ToAll(Augment):
     
-    def __call__(self, input_pano, input_box, target, seed=None):
+    def __call__(self, input_pano, input_box, target_major, target_minor, seed=None):
         if not seed:
             seed = random.randint(0,2**32)
 
@@ -49,13 +49,16 @@ class ToAll(Augment):
         resetSeed(seed)
         input_box = self.transform(input_box)
         resetSeed(seed)
-        target = self.transform(target)
-        return input_pano, input_box, target
+        target_major = self.transform(target_major)
+        resetSeed(seed)
+        target_minor = self.transform(target_minor)
+        
+        return input_pano, input_box, target_major, target_minor
 
 
 class InputOnly(Augment):
 
-    def __call__(self, input_pano, input_box, target, seed=None):
+    def __call__(self, input_pano, input_box, target_major, target_minor, seed=None):
         if not seed:
             seed = random.randint(0,2**32)
 
@@ -63,28 +66,38 @@ class InputOnly(Augment):
         input_pano = self.transform(input_pano)
         resetSeed(seed)
         input_box = self.transform(input_box)
-        return input_pano, input_box, target
+        return input_pano, input_box, target_major, target_minor
+
+class TargetOnly(Augment):
+    
+    def __call__(self, input_pano, input_box, target_major, target_minor, seed=None):
+        if not seed:
+            seed = random.randint(0,2**32)
+
+        resetSeed(seed)
+        target_major = self.transform(target_major)
+        resetSeed(seed)
+        target_minor = self.transform(target_minor)
+
+        return input_pano, input_box, target_major, target_minor
 
 
 class PanoOnly(Augment):
     
-    def __call__(self, input_pano, input_box, target):
+    def __call__(self, input_pano, input_box, target_major, target_minor):
         input_pano = self.transform(input_pano)
-        return input_pano, input_box, target
+        return input_pano, input_box, target_major, target_minor
 
 
 class BoxOnly(Augment):
     
-    def __call__(self, input_pano, input_box, target):
+    def __call__(self, input_pano, input_box, target_major, target_minor):
         input_box = self.transform(input_box)
-        return input_pano, input_box, target
+        return input_pano, input_box, target_major, target_minor
 
 
-class TargetOnly(Augment):
-    
-    def __call__(self, input_pano, input_box, target):
-        target = self.transform(target)
-        return input_pano, input_box, target
+##############
+
 
 class Threshold():
 
