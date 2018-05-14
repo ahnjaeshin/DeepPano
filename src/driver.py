@@ -11,11 +11,12 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+import signal
 from tensorboardX import SummaryWriter
 
 import loss
 import metric
-from dataset import PanoSet, CLASSES
+from dataset import PanoSet
 from model import UNet
 from torchvision import transforms
 from trainer import Trainer
@@ -29,7 +30,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
 
 FRONT = (11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43)
-
+writers = {}
 class Filter():
     
     def __init__(self, filters):
@@ -41,7 +42,7 @@ class Filter():
             "unsegmentable": lambda row: int(row['Segmentable.Type']) >= 10,
             "front-teeth": lambda row: int(row['Tooth.Num.Annot']) in FRONT,
         }
-        self.func = [lambda row: row['Classification.Target'] != 'Error']
+        self.func = [lambda row: int(row['Segmentable.Type']) > 0]
         self.func += [lookup[f] for f in filters]
 
     def __call__(self, row):
@@ -163,9 +164,9 @@ def main(config):
     ##################
     config_model = config["model"]
 
-    model = UNet(2, len(CLASSES), **config_model["param"])
-    # dummy_input = torch.rand(1, 2, 128, 128)
-    # writers['train'].add_graph(model, (dummy_input, ))
+    model = UNet(2, 2, **config_model["param"])
+    dummy_input = torch.rand(2, 2, *config_augmentation['size'])
+    writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
     # writers['train'].add_graph_onnx("graph.proto")
     model_sum = model_summary(model, input_size=(2, 224, 224))
@@ -181,13 +182,10 @@ def main(config):
     config_metrics = config_evaluation["metrics"]
     # IOU, DICE
     config_loss = config_evaluation["loss"]
-    config_segmentation_loss = config_loss["segmentation"]
-    config_classification_loss = config_loss["classification"]
 
     metricParser = TypeParser(table = {
         "IOU": metric.IOU, 
         "DICE": metric.DICE,
-        "accuracy": metric.Accuracy,
     })
     metrics = [metricParser(**m) for m in config_metrics]
 
@@ -196,9 +194,7 @@ def main(config):
         "DICE": loss.DICELoss,
         "CE": nn.CrossEntropyLoss,
     })
-    criterion = loss.MultiOutputLoss(
-        [lossParser(**config_segmentation_loss), lossParser(**config_classification_loss)],
-        **config_loss["param"])
+    criterion = lossParser(**config_loss)
 
     ##################
     #    learning    #
@@ -244,15 +240,21 @@ def main(config):
     ##################
     #    training    #
     ##################
-    try:
-        trainer.train(**config["training"])
-    except KeyboardInterrupt:
-        slack_message("abupt end", config_logging_channel)
+    slack_message('\n'.join(log))
+    trainer.train(**config["training"])
     
     writers['train'].close()
     writers['val'].close()
 
+def killed(signal, frame):
+    print("program abrupt end")
+    slack_message("program abrupt end")
+    writers['train'].close()
+    writers['val'].close()
+    exit(0)
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, killed)
     args = parser.parse_args()
     main(json.load(open(args.config)))
     # mp = mp.set_start_method("spawn")

@@ -112,6 +112,18 @@ class ClassMeter():
             self.targets = np.append(self.targets, target.numpy())
         
 
+def broadcast(func):
+    """ 
+    decorator for broadcasting
+    """
+    def broadcast_func(x, *args, **kwargs):
+        if type(x) is list or type(x) is tuple:
+            return [func(x_i, *args, **kwargs) for x_i in x]
+        else:
+            return func(x, *args, **kwargs)
+    return broadcast_func
+
+
 """
 Code borrowed & modified from https://github.com/sksq96/pytorch-summary/blob/master/torchsummary/torchsummary.py
 """
@@ -249,10 +261,3 @@ def slack_message(text, channel=None):
         slack.chat.post_message(channel, text=None, attachments=[log], as_user=False, username=host)
     except Exception as e:
         print("slack error occured: {}".format(e))
-
-
-def main():
-    slack_message('앞으로 aws ec2 instance에서 학습 돌리는건 여기로 logging이 될 것입니다, 원래 이 함수에 exception도 잡아야 하는데 귀찮..', '#ct')
-
-if __name__ == '__main__':
-    main()

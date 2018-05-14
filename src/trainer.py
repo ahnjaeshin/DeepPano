@@ -27,9 +27,7 @@ from torchvision import datasets
 from torch.autograd import Variable
 
 from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, ClassMeter
-from torch.nn import functional as F
 import shutil
-from metric import Accuracy
 
 class Pipeline:
     def __init__(self, *pipe):
@@ -40,15 +38,6 @@ class Pipeline:
             data = p(data)
         return data
 
-def broadcast(func):
-    def broadcast_func(x, *args, **kwargs):
-        if type(x) is list or type(x) is tuple:
-            return [func(x_i, *args, **kwargs) for x_i in x]
-        else:
-            return func(x, *args, **kwargs)
-    return broadcast_func
-
-@broadcast
 def cuda(x, device, async=False):
     """for use in gpu
     add async=True"""
@@ -59,23 +48,7 @@ def cuda(x, device, async=False):
         return x.cuda(device, non_blocking=True)
     return x.to(device)
 
-@broadcast
-def sigmoid(x):
-    """take sigmoid
-    
-    Arguments:
-        x {output} -- output of model
-    """
-    return F.sigmoid(x)
-
-
-@broadcast
 def cpu(x):
-    """cpu
-    
-    Arguments:
-        x {tensor or iterable of tensors}
-    """
     return x.detach().cpu()
 
 def write_scalar_log(name, val, epoch, log, writer):
@@ -85,8 +58,6 @@ def write_scalar_log(name, val, epoch, log, writer):
     log.append('{name} : {val:.5f}'.format(name=name, val=val))
     writer.add_scalar(name, val, epoch)
 
-def render_output(output):
-    pass
 
 class Init():
     def __init__(self, init="xavier_normal"):
@@ -161,6 +132,9 @@ class Trainer():
         slack_message('train started', '#botlog')
         slack_message('using {} gpus'.format(torch.cuda.device_count()))
 
+        global_data_times = AverageMeter()
+        global_propagate_times = AverageMeter()
+
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
                                       shuffle = True, 
@@ -215,26 +189,19 @@ class Trainer():
         metric_geometric_scores = [GeometricMeter() for metric in self.metrics]
         curr_scores = AverageMeter() # average of all metrics
 
-        result_classification = ClassMeter()
-        result_segmentation = ClassMeter()
+        result = ClassMeter()
 
         input_image = ImageMeter(10)
-        segmentation_output_image = ImageMeter(10)
-        segmentation_target_image = ImageMeter(10)
-
-        self.model.train(train)
+        output_image = ImageMeter(10)
+        target_image = ImageMeter(10)
 
         start = time.time()
-        for batch_idx, (input, target, filepath, index) in enumerate(tqdm(dataloader, desc='batch')):
+        for batch_idx, (input, target, index) in enumerate(tqdm(dataloader, desc='batch')):
             data_times.update(time.time() - start)
             batch_size = input.size(0)
 
             # forward & backward
-            if train:
-                loss, output = self.batch_once(input, target, train)
-            else:
-                with torch.no_grad():
-                    loss, output = self.batch_once(input, target, train)
+            loss, output = self.batch_once(input, target, train)
 
             losses.update(loss, batch_size)
             del loss
@@ -242,16 +209,15 @@ class Trainer():
             start = time.time()
 
             for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
-                arith_score.update(metric.eval(output, target), batch_size)
-                geo_score.update(metric.eval(output, target), batch_size)
+                arith_score.update(metric(output, target), batch_size)
+                geo_score.update(metric(output, target), batch_size)
                 curr_scores.update(arith_score.val, batch_size)
             
-            result_classification.update(output[1], target[1])
-            result_segmentation.update(output[0], target[0])
+            result.update(output, target)
 
             input_image.update(input)
-            segmentation_output_image.update(output[0])
-            segmentation_target_image.update(target[0])
+            output_image.update(output)
+            target_image.update(target)
 
         if train:
             self.scheduler.step()
@@ -261,9 +227,7 @@ class Trainer():
             self.save_checkpoint(epoch, is_best)
 
         # log ()
-        log = [
-            '[{0}] Epoch: [{1}][{2}/{3}]'.format('train' if train else 'val', epoch, batch_idx + 1, len(dataloader)),
-        ]
+        log = [ '{0}'.format('train' if train else 'val'), ]
         write_scalar_log('time/propagate', propagate_times.avg, epoch, log, writer)
         write_scalar_log('time/data', data_times.avg, epoch, log, writer)
         write_scalar_log('loss', losses.avg, epoch, log, writer)
@@ -288,49 +252,36 @@ class Trainer():
 
         if do_log:
             slack_message("\n".join(log), '#botlog')
-
-        writer.add_image('pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('segmentation/target', make_grid(segmentation_target_image.images, normalize=True, scale_each=True), epoch)
-        writer.add_image('segmentation/output', make_grid(segmentation_output_image.images, normalize=True, scale_each=True), epoch)
+            
+        writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
         
-        writer.add_pr_curve('segmentation', result_classification.targets, result_classification.outputs, epoch)
-        writer.add_pr_curve('classification', result_segmentation.targets, result_segmentation.outputs, epoch)
+        writer.add_image('major/output', make_grid(output_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+        writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+
+        writer.add_pr_curve('segmentation', result.targets, result.outputs, epoch)
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
 
         input, target = cuda(input, self.device), cuda(target, self.device, True)
-
-        output = self.model(input)
-        loss = self.criterion(outputs=output, targets=target)
-
-        if train: 
+        
+        if train:
+            self.model.train()
+            output = self.model(input)
+            loss = self.criterion(output, target)
             self.optimizer.zero_grad()   
             loss.backward()         
             self.optimizer.step()
-
-        output = F.sigmoid(output[0]), torch.argmax(F.softmax(output[1], dim=1), dim=1)
-        # output1 (batch_size, W, H)  
-        # output2 (batch_size, )
+        else:
+            self.model.eval()
+            with torch.no_grad():
+                output = self.model(input)
+            loss = self.criterion(output, target)
 
         return loss.cpu().item(), cpu(output)
-
-    # def render_output(self, output):
-    #     """output rendered
-        
-    #     Arguments:
-    #         output {list of tensors} -- (segmentation output, classification output)
-        
-    #     Returns:
-    #         output -- list of tensors
-    #     """
-
-    #     output1, output2 = output
-    #     output2 = torch.argmax(output2, dim=1)
-    #     output1 = output1 * output2.reshape(output2.shape[0], output2.shape[1], 1, 1)
-    #     output = output1, output2
-    #     return output
 
     def search(self):
         pass
