@@ -1,10 +1,6 @@
 '''
 
-python3 manage.py genData (marginType) (autoSeg) (targetGen) (inputFileName)
-
-
-python3 manage.py decideTarget (updateFileName)
-
+python3 manage.py genData (marginType) (segCriterion) (inputFileName)
 
 python3 manage.py genStat (fileName)
 
@@ -29,35 +25,28 @@ def __main__():
     
     if len(sys.argv) < 2:
         print('need to input commands\n',
-                'genData (marginType) (autoSeg) (targetGen) (inputFileName), or\n',
-                'decideTarget (updateFileName)')
+                'genData (marginType) (segCriterion) (inputFileName), or\n',
+                'genStat (fileName)')
         return
     
     command = str(sys.argv[1])
     
     if command == "genData":
-        if len(sys.argv) != 6:
-            # autoSeg: 0 (don't autogenerate) 1 (auto - simple) 2 (auto - complex)
-            # targetGen: 0 (don't generate) 1 (auto - simple) 2 (auto - complex)
-            print('need to input marginType autoSeg targetGen and inputFileName\n')
+        if len(sys.argv) != 5:
+            print('need to input marginType and segCriterion inputFileName\n')
             return
         marginType = int(sys.argv[2])
-        autoSeg = int(sys.argv[3])
-        targetGen = int(sys.argv[4])
-        inputFileName = str(sys.argv[5])
-        generateDataset(marginType, autoSeg, targetGen, inputFileName)
-    elif command == "decideTarget":
-        if len(sys.argv) != 3:
-            print('need to input updateFileName\n')
-            return
-        updateFileName = str(sys.argv[2])
-        decideTarget(updateFileName)
+        segCriterion = float(sys.argv[3])
+        inputFileName = str(sys.argv[4])
+        generateDataset(marginType, segCriterion, inputFileName)
     elif command == "genStat":
         if len(sys.argv) != 3:
             print('need to input fileName\n')
             return
         fileName = str(sys.argv[2])
         calcStat(fileName)
+    else:
+        print('need to type in command')
 
     return
 
@@ -67,7 +56,7 @@ def __main__():
 #######################
 
 
-def generateDataset(marginType, autoSeg, targetGen, inputFileName):
+def generateDataset(marginType, segCriterion, inputFileName):
     
     try:
         inputDf = pd.read_csv(inputFileName)
@@ -85,25 +74,27 @@ def generateDataset(marginType, autoSeg, targetGen, inputFileName):
 
     # timestamp = datetime.datetime.fromtimestamp(time.mktime(time.localtime())).strftime('%Y%m%d%H%M%S')
     # TODO: should extract inputFileName from route using regex
-    outputFormat = inputFileName[17:-4] + '-' + str(marginType) + '-' + str(autoSeg) + '-' + str(targetGen)
+    outputFormat = inputFileName[17:-4] + '-' + str(marginType)
     outImgPath = '../data/metadata/' + outputFormat + '/'
-    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
+    outCsvFileName = '../data/metadata/' + outputFormat + '-' + str(segCriterion) + '.csv'
     if (os.path.exists(outImgPath)):
         print('directory already exists for outImgPath' + outImgPath)
-        return
+        # return
     else:
         os.mkdir(outImgPath)
+    if not os.path.exists(outImgPath + str(segCriterion) + '/'):
+        os.mkdir(outImgPath + str(segCriterion) + '/')
 
     print('outputRoute: {}'.format(outputFormat))
 
-    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
-            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
-            'Train.Val']
+    outCols = ['Name', 'Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Major.Annot.Img', 'Cropped.Minor.Annot.Img',
+            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Major.Annot', 'Tooth.Num.Minor.Annot',
+            'Max.Teeth.IOU', '2nd.Max.Teeth.IOU', 'Max.Box.IOU', '2nd.Max.Box.IOU', 'Margin.Type', 'Segmentable.Type',
+            'Major.Target.Img', 'Minor.Target.Img', 'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
-        rows.extend(generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row))
+        rows.extend(generateDatasetForEachFile(marginType, segCriterion, outImgPath, row))
    
     outputDf = pd.DataFrame(rows, columns=outCols)
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
@@ -111,7 +102,7 @@ def generateDataset(marginType, autoSeg, targetGen, inputFileName):
     return
 
 
-def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
+def generateDatasetForEachFile(marginType, segCriterion, outImgPath, row):
 
     outRows = []
 
@@ -140,6 +131,7 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
 
         print(tooth.attrib)
         toothNum = int(tooth.attrib['Number'])
+        thisTitle = imageTitle + '-' + str(toothNum)
         coords = genCoordsFromTooth(tooth)
         
         cropPanoImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE) # flipped
@@ -159,54 +151,62 @@ def generateDatasetForEachFile(marginType, autoSeg, targetGen, outImgPath, row):
 
         if not doAnnot:
 
-            cpiName = outImgPath + 'cropPanoImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-            cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-            iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
+            cpiName = outImgPath + 'cropPanoImg' + '-' + thisTitle + '.jpg'
+            cbiName = outImgPath + 'cropBoxImg' + '-' + thisTitle + '.jpg'
 
             cv2.imwrite(cpiName, cropPanoImg)
             cv2.imwrite(cbiName, cropBoxImg)
-            cv2.imwrite(iiName, inputImg)
 
-            newRow = [cpiName, cbiName, iiName, -1, leftMostCoor, cropPanoImg.shape, toothNum,
-                    -1, -1, -1, -1, marginType, -1, -1, -1, row['Train.Val']]
+            newRow = [cpiName, cbiName, -1, leftMostCoor, cropPanoImg.shape, toothNum,
+                    -1, -1, -1, -1, marginType, -1, -1, -1, -1, row['Train.Val']]
             outRows.append(newRow)
 
             continue
 
-        maxIOU, sndMaxIOU, boxIOU, annotToothNum, annotImg = genAnnotImage(annotPsd, boxImg, imgShape) # flipped
-        leftMostCoor, cropAnnotImg = cropImageWithMargin(annotImg, coords, marginType, imgShape)
-        cropAnnotImg = cv2.flip(cropAnnotImg, 0) # unflip
+        maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, majorToothNum, majorAnnotImg, minorToothNum, minorAnnotImg = genAnnotImages(annotPsd, boxImg, imgShape) # flipped
+        leftMostCoor, cropMajorAnnotImg = cropImageWithMargin(majorAnnotImg, coords, marginType, imgShape)
+        cropMajorAnnotImg = cv2.flip(cropMajorAnnotImg, 0) # unflip
+        leftMostCoor, cropMinorAnnotImg = cropImageWithMargin(minorAnnotImg, coords, marginType, imgShape)
+        cropMinorAnnotImg = cv2.flip(cropMinorAnnotImg, 0) # unflip
 
-        segType = -1 if autoSeg == 0 else decideSegType(autoSeg, maxIOU, sndMaxIOU, boxIOU)
-        targetImg = None if targetGen == 0 else genTargetImage(targetGen, segType, maxIOU, cropAnnotImg, cropBoxImg)
+        segType = decideSegType(maxIOU, sndMaxIOU, fstBoxIOU)
+        majorTargetFlag = genTargetImage(segCriterion, maxIOU, cropMajorAnnotImg, cropBoxImg)
+        minorTargetFlag = genTargetImage(segCriterion, sndMaxIOU, cropMinorAnnotImg, cropBoxImg)
 
         # TODO: Wrong tooth number check?
 
         # TODO: calculate imageTitle from panoFileName and delete imageTitle column from .csv
-        cpiName = outImgPath + 'cropPanoImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-        cbiName = outImgPath + 'cropBoxImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-        iiName = outImgPath + 'inputImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-        caiName = outImgPath + 'cropAnnotImg' + '-' + imageTitle + '-' + str(toothNum) + '.jpg'
-        tiName = -1 if targetGen == 0 else re.sub('cropPanoImg', 'targetImg', cpiName)
+        cpiName = outImgPath + 'cropPanoImg' + '-' + thisTitle + '.jpg'
+        cbiName = outImgPath + 'cropBoxImg' + '-' + thisTitle + '.jpg'
+        macaiName = outImgPath + 'cropAnnotMajorImg' + '-' + thisTitle + '.jpg'
+        micaiName = outImgPath + 'cropAnnotMinorImg' + '-' + thisTitle + '.jpg'
+        matiName = 0 if not majorTargetFlag else re.sub('cropPanoImg', 'targetMajorImg', cpiName)
+        mitiName = 0 if not minorTargetFlag else re.sub('cropPanoImg', 'targetMinorImg', cpiName)
 
         # export images
-        cv2.imwrite(cpiName, cropPanoImg)
-        cv2.imwrite(cbiName, cropBoxImg)
-        cv2.imwrite(iiName, inputImg)
-        cv2.imwrite(caiName, cropAnnotImg)
-        if targetGen > 0:
-            cv2.imwrite(tiName, targetImg)
+        if False:
+            cv2.imwrite(cpiName, cropPanoImg)
+            cv2.imwrite(cbiName, cropBoxImg)
+            cv2.imwrite(macaiName, cropMajorAnnotImg)
+            cv2.imwrite(micaiName, cropMinorAnnotImg)
+            if majorTargetFlag:
+                cv2.imwrite(matiName, cropMajorAnnotImg)
+            if minorTargetFlag:
+                cv2.imwrite(mitiName, cropMinorAnnotImg)
 
         # for debugging purpose only
-        if targetGen > 0:
-            allImg = cv2.copyMakeBorder(inputImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-            cv2.addWeighted(cv2.add(inputImg, targetImg), 0.6, allImg, 0.4, 0, allImg)
-            aiName = re.sub('cropPanoImg', 'allImg', cpiName)
-            cv2.imwrite(aiName, allImg)
+        majorTargetImg = np.zeros(cropMajorAnnotImg.shape, dtype = np.uint8) if not majorTargetFlag else cropMajorAnnotImg
+        minorTargetImg = np.zeros(cropMinorAnnotImg.shape, dtype = np.uint8) if not minorTargetFlag else cropMinorAnnotImg
+        
+        allImg = cv2.copyMakeBorder(inputImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+        cv2.addWeighted(cv2.add(inputImg, cv2.add(majorTargetImg, minorTargetImg)), 0.6, allImg, 0.4, 0, allImg)
+        aiName = re.sub('cropPanoImg', str(segCriterion) + '/allImg', cpiName)
+        cv2.imwrite(aiName, allImg)
 
         # write row for .csv
-        newRow = [cpiName, cbiName, iiName, caiName, leftMostCoor, cropPanoImg.shape, toothNum,
-                annotToothNum, maxIOU, sndMaxIOU, boxIOU, marginType, segType, tiName, row['Train.Val']]
+        newRow = [thisTitle, cpiName, cbiName, macaiName, micaiName, leftMostCoor, cropPanoImg.shape, toothNum,
+                majorToothNum, minorToothNum, maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, marginType,
+                segType, matiName, mitiName, row['Train.Val']]
         outRows.append(newRow)
 
     return outRows
@@ -236,13 +236,17 @@ def genBoxImage(img, coords):
     return img
 
 
-def genAnnotImage(annotPsd, boxImg, imgShape):
+def genAnnotImages(annotPsd, boxImg, imgShape):
 
     maxIOU = 0
     sndMaxIOU = 0
-    boxIOU = 0
-    maxIOULayer = None
+    fstBoxIOU = 0
+    sndBoxIOU = 0
+
+    maxIOULayerName = 0
     maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
+    sndMaxIOULayerName = 0
+    sndMaxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
     for layer in annotPsd.layers:
         if layer is None or layer.bbox == (0, 0, 0, 0):
@@ -273,56 +277,50 @@ def genAnnotImage(annotPsd, boxImg, imgShape):
 
         if thisIOU > 0:
             print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
+
         if (maxIOU <  thisIOU):
+
             sndMaxIOU = maxIOU
+            sndBoxIOU = fstBoxIOU
+            sndMaxIOULayerName = maxIOULayerName
+            sndMaxIOULayerImg = maxIOULayerImg
+
             maxIOU = thisIOU
-            boxIOU = thisBoxIOU
-            maxIOULayer = layer
+            fstBoxIOU = thisBoxIOU
+            maxIOULayerName = layer.name
             maxIOULayerImg = annotImg
+
         elif (sndMaxIOU < thisIOU):
+
             sndMaxIOU = thisIOU
+            sndBoxIOU = thisBoxIOU
+            sndMaxIOULayerName = layer.name
+            sndMaxIOULayerImg = annotImg
 
-    #if maxIOU < 0.8:
-    #    maxIOULayer = None
-    #    maxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
-
-    return ((maxIOU, sndMaxIOU, boxIOU, 0, maxIOULayerImg) if maxIOULayer is None
-            else (maxIOU, sndMaxIOU, boxIOU, maxIOULayer.name, maxIOULayerImg))
+    return (maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, maxIOULayerName, maxIOULayerImg, sndMaxIOULayerName, sndMaxIOULayerImg)
 
 
-def genTargetImage(targetGen, segType, maxIOU, cropAnnotImg, cropBoxImg):
-    if targetGen == 0:
-        return None
-    if targetGen == 1:
-        if segType < 10:
-            return cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-        return np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-    if targetGen == 2:
-        intersectionImg = cv2.bitwise_and(cropAnnotImg, cropBoxImg)
-        intersectionArea = np.sum(intersectionImg == 255)
-        teethArea = np.sum(cropAnnotImg == 255)
-        newMaxIOU = intersectionArea / teethArea
-        #if maxIOU < 0.05 or (maxIOU / newMaxIOU) < 0.67:
-        if maxIOU < 0.12:
-            return np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-        return cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-    return None
+def genTargetImage(segCriterion, maxIOU, cropAnnotImg, cropBoxImg):
+    # intersectionImg = cv2.bitwise_and(cropAnnotImg, cropBoxImg)
+    # intersectionArea = np.sum(intersectionImg == 255)
+    # teethArea = np.sum(cropAnnotImg == 255)
+    # newMaxIOU = intersectionArea / teethArea
+    # if maxIOU < 0.05 or (maxIOU / newMaxIOU) < 0.67:
+    if maxIOU < segCriterion:
+        return False # np.zeros(cropAnnotImg.shape, dtype=np.uint8)
+    return True # cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
 
 
-def decideSegType(autoSeg, maxIOU, sndMaxIOU, boxIOU):
-    if autoSeg == 0:
-        return -1
-    if autoSeg == 1:
-        if maxIOU < 0.3 and boxIOU < 0.3:
-            return 10 # no teeth
-        if maxIOU > 0.67:
-            if (maxIOU * 0.67) < sndMaxIOU:
-                return 12 # two teeth
-            return 4 # inclusive
+def decideSegType(maxIOU, sndMaxIOU, boxIOU):
+    if maxIOU < 0.3 and boxIOU < 0.3:
+        return 10 # no teeth
+    if maxIOU > 0.67:
         if (maxIOU * 0.67) < sndMaxIOU:
-            return 11 # half half
-        return 5 # half inclusive
-    return -3
+            return 12 # two teeth
+        return 4 # inclusive
+    if (maxIOU * 0.67) < sndMaxIOU:
+        return 11 # half half
+    return 5 # half inclusive
 
 
 def genCoordsFromTooth(tooth):
@@ -332,7 +330,8 @@ def genCoordsFromTooth(tooth):
 def cropImageWithMargin(img, coords, marginType, imgShape):
     marginFuns = {1: _cropImageWithMargin1, 2: _cropImageWithMargin2, 3: _cropImageWithMargin3,
             4: _cropImageWithMargin4, 5: _cropImageWithMargin5, 6: _cropImageWithMargin6,
-            7: _cropImageWithMargin7, 8: _cropImageWithMargin8, 9: _cropImageWithMargin9}
+            7: _cropImageWithMargin7, 8: _cropImageWithMargin8, 9: _cropImageWithMargin9,
+            10: _cropImageWithMargin10}
     return marginFuns[marginType](img, coords, imgShape)
 
 
@@ -388,72 +387,9 @@ def _cropImageWithMargin8(img, coords, imgShape):
 def _cropImageWithMargin9(img, coords, imgShape):
     return __cropImageWithSimpleMargin(img, coords, [70, 70, 150, 150], imgShape)
 
-
-####################
-#   DecideTarget   #
-####################
-
-
-def decideTarget(updateFileName):
-
-    try:
-        inputDf = pd.read_csv(updateFileName)
-    except IOError:
-        print('cannot read input file')
-        return
-
-    rowNum, colNum = inputDf.shape
-    if colNum != 17:
-        print('wrong number of columns')
-        return
-
-    # TODO: columns check?
-
-    outCols = ['Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Input.Img', 'Cropped.Annot.Img',
-            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Annot',
-            'Max.IOU', '2nd.Max.IOU', 'Box.IOU', 'Margin.Type', 'Segmentable.Type', 'Target.Img',
-            'Classification.Target', 'Train.Val']
-    rows = []
-
-    for idx, row in inputDf.iterrows():
-        rows.append(generateTargetImage(row))
-
-    outputDf = pd.DataFrame(rows, columns=outCols)
-    outputDf.to_csv(updateFileName, encoding='utf-8')
-
-    return
-
-
-def generateTargetImage(row):
-
-    outRow = copy.deepcopy(row.tolist())
-
-    cropAnnotImg = cv2.imread(row['Cropped.Annot.Img'], cv2.IMREAD_GRAYSCALE)
-    targetImg = cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-    segType = row['Segmentable.Type']
-
-    imgName = re.sub('(\S*/)*(\S+)([.]jpg)', '\\2', row['Cropped.Pano.Img'])
-    if (segType < 0):
-        print('{} segmentable type is error {}. skip.'.format(imgName, segType))
-        trainVal = outRow[-1]
-        outRow = outRow[1:-2]
-        outRow.append(-1)
-        outRow.append(trainVal)
-        return outRow
-
-    if (segType >= 10): # not segmentable
-        targetImg = np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-
-    tiName = re.sub('cropAnnotImg', 'targetImg', row['Cropped.Annot.Img'])
-    cv2.imwrite(tiName, targetImg)
-
-    print('{} segmentable type is {}. gen target Img.'.format(imgName, segType))
-
-    trainVal = outRow[-1]
-    outRow = outRow[1:-2]
-    outRow.append(tiName)
-    outRow.append(trainVal)
-    return outRow
+    
+def _cropImageWithMargin10(img, coords, imgShape):
+    return __cropImageWithSimpleMargin(img, coords, [100, 100, 150, 150], imgShape)
 
 
 ################
@@ -475,6 +411,10 @@ def calcStat(fileName):
     varPano = 0
     varBox = 0
 
+    totalCount = 0
+    noneCount = 0
+    noneNSingleCount = 0
+    
     for idx, row in inputDf.iterrows():
 
         cropPanoImg = cv2.imread(row['Cropped.Pano.Img'], cv2.IMREAD_GRAYSCALE)
@@ -485,9 +425,15 @@ def calcStat(fileName):
         sumPanoPixelValue += np.sum(cropPanoImg) / 255
         sumBoxPixelValue += np.sum(cropBoxImg) / 255
 
-
+        totalCount += 1
+        noneCount += 1 if (row['Major.Target.Img'] == str(0)) else 0
+        noneNSingleCount +=1 if (row['Minor.Target.Img'] == str(0)) else 0
+           
     meanPano = sumPanoPixelValue / sumPixelNum
     meanBox = sumBoxPixelValue / sumPixelNum
+
+    singleCount = noneNSingleCount - noneCount
+    doubleCount = totalCount - noneNSingleCount
 
     for idx, row in inputDf.iterrows():
 
@@ -509,6 +455,7 @@ def calcStat(fileName):
 
     print("Pano(Mean, Std) = ({}, {})".format(meanPano, stdPano))
     print("Box(Mean, Std) = ({}, {})".format(meanBox, stdBox))
+    print("None: {}, Single: {}, Double: {}".format(noneCount, singleCount, doubleCount))
 
     return
 
