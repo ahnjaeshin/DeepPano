@@ -1,21 +1,17 @@
 {
     "logging": {
         "slack_channel": "#botlog",
-        "debug": true,
+        "logdir": true,
         "title": "test",
+        "start_time": "",
         "description": "for validation",
         "trial": 1,
         "reproducible": true
     },
 
     "augmentation": {
-        "size": [128, 64],
-        "train": [
-            { "category": "All", "type": "HFlip" },
-            { "category": "All", "type": "VFlip" },
-            { "category": "All", "type": "Rotate", 
-                "param": { "degrees": [-40, 40] }}
-        ],
+        "size": [64, 32],
+        "train": [],
         "val": []
     },
 
@@ -32,7 +28,7 @@
         "type": "UNET",
         "param": {
             "bilinear": false,
-            "unit": 4
+            "unit": 6
         }
     },
 
@@ -54,13 +50,13 @@
     },
 
     "learning": {
-        "checkpoint": null,
+        "checkpoint": "None",
         "weight_init": "he_uniform",
         "hard_example_mining": false,
         "lr_schedule": {
             "type": "Step",
             "param": {
-                "step_size": 30, 
+                "step_size": 50, 
                 "gamma": 0.1
             }
         },
@@ -68,16 +64,16 @@
             "type": "SGD",
             "param": {
                 "weight_decay": 1e-5,
-                "lr": 1
+                "lr": 0.01
             }
         },
         "emsemble": false
     },
 
     "training": {
-        "epochs": 90,
+        "epochs": 2,
         "batch_size": 10,
         "num_workers": 16,
-        "log_freq": 1
+        "log_freq": 10
     }
 }

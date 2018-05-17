@@ -13,16 +13,21 @@ from threading import Lock, Condition
 import threading
 import shutil
 
+import datetime
+import socket
+import json
+
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--mode", "-m", type=str, help="add, watch, end", default="add")
+parser.add_argument("--mode", "-m", type=str, help="add, watch, delete, end", default="add")
 parser.add_argument("--gpu", "-g", nargs='+', help="gpu ids to use")
 parser.add_argument("--config", "-c", type=str, help="path to config file")
-parser.add_argument("--log", "-l", type=str, help="optional stdout")
 parser.add_argument("--pid", "-p", type=int, help="if delete process")
 
-JOBS = 'experiments'
+# write title in hierarchical way e.g. UNET/HE/SGD
+parser.add_argument("--title", "-t", type=str, help="title of experiment")
 
+JOBS = 'experiments'
 
 running = {}
 gpu_lock = Condition()
@@ -34,9 +39,9 @@ class Experiment():
     config : path to config (str)
     """
 
-    def __init__(self, gpu, config, log):
+    def __init__(self, gpu, config, title=None):
         self.config = config
-        self.log = log
+        self.title = title
 
         if gpu is None:
             gpu = [str(idx) for idx in range(cuda.device_count())] if cuda.is_available() else None
@@ -45,16 +50,18 @@ class Experiment():
 
     @staticmethod
     def makeExperiment(e):
-        gpu, config, log = e.split('|')
+        gpu, config, title = e.split('|')
+        if title == "None":
+            title = None
         if gpu != "None":
             gpu = gpu.split(',')
-        return Experiment(gpu, config, log)
+        return Experiment(gpu, config, title)
 
     def __str__(self):
         gpu = self.gpu
         if gpu is not None:
             gpu = ','.join(self.gpu)
-        return "{}|{}|{}\n".format(gpu, self.config, self.log)
+        return "{}|{}|{}\n".format(gpu, self.config, self.title)
         
 def canRunGPU(gpu):
     for idx in gpu:
@@ -62,37 +69,49 @@ def canRunGPU(gpu):
             return False
     return True
     
-def run(experiment):
+def run(experiment, experimentNum):
+    
+    config = json.load(open(experiment.config))
+
+    time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
+    if experiment.title is None:
+        title = config['logging']['title']
+    else:
+        title = experiment.title
+        config['logging']['title'] = title
+    
+    log_dir = '../result/runs/{title}/{time}_{trial}/log.txt'.format(title=title, time=time, trial=experimentNum)
+    config_dir = '../result/runs/{title}/{time}_{trial}/config.json'.format(title=title, time=time, trial=experimentNum)
+
+    config['logging']['start_time'] = time
+    config['logging']['logdir'] = log_dir
+    config['logging']['trial'] = experimentNum
+
+    os.makedirs(os.path.dirname('../result/runs/{title}/{time}_{trial}/'.format(title=title, time=time, trial=experimentNum)), exist_ok=True)
+    with open(config_dir, 'w') as c:
+        json.dump(config, c, sort_keys=True, indent=4)
     
     env = os.environ.copy()
     
-    if experiment.gpu is not None: # and cuda.is_available():
-        
-        if cuda.is_available():
-            gpu = experiment.gpu
-            gpu.sort()
+    if experiment.gpu is not None and cuda.is_available():
+        gpu = experiment.gpu
+        gpu.sort()
+        gpu_lock.acquire()
 
-            gpu_lock.acquire()
+        while not canRunGPU(gpu):
+            gpu_lock.wait()
 
-            while not canRunGPU(gpu):
-                gpu_lock.wait()
-
-            for idx in gpu:
-                gpu_acquired[int(idx)] = True
-        
-            gpu_lock.release()
-
+        for idx in gpu:
+            gpu_acquired[int(idx)] = True
+    
+        gpu_lock.release()
         env['CUDA_VISIBLE_DEVICES'] = ', '.join(experiment.gpu)
 
-    command = ['python3', 'driver.py', '--config', experiment.config]
+    command = ['python3', 'driver.py', '--config', config_dir, '--title', title]
 
-    if experiment.log is None:
-        p = subprocess.Popen(command, env=env, universal_newlines=True)
-        running[p.pid] = experiment, None, p
-    else:
-        log = open(experiment.log, 'w')
-        p = subprocess.Popen(command, env=env, universal_newlines=True, stdout=log)
-        running[p.pid] = experiment, log, p
+    logfile = open(log_dir, 'w')
+    p = subprocess.Popen(command, env=env, universal_newlines=True, stdout=logfile)
+    running[p.pid] = experiment, logfile, p
     
     slack_message('new experiment pid({})'.format(p.pid))
     print('new experiment pid({})'.format(p.pid))
@@ -127,13 +146,13 @@ def watch():
                 experimentNum += 1
             
                 experiment = Experiment.makeExperiment(e)
-                thread = threading.Thread(target=run, args=(experiment,))
+                thread = threading.Thread(target=run, args=(experiment, experimentNum))
                 thread.start()
                 
 
 def add(args):
     with open(JOBS, 'w', ) as fifo:
-        fifo.write(str(Experiment(args.gpu, args.config, args.log)))
+        fifo.write(str(Experiment(args.gpu, args.config, args.title)))
         print("Added new experiment")
 
 def end():
@@ -153,8 +172,7 @@ def done(signum, p):
 
             print('pid {} gpu {}----------'.format(pid, experiment.gpu))
 
-            if log is not None:
-                log.close()
+            log.close()
 
             if cuda.is_available():
                 gpu = experiment.gpu
@@ -176,10 +194,17 @@ def delete(pid):
     with open(JOBS, 'w', ) as fifo:
         fifo.write('delete:{}'.format(pid))
 
-    
-
 def main(args):
     signal.signal(signal.SIGCHLD, done)
+
+    if args.mode == 'add':
+        if args.config is None:
+            raise Exception('in add mode, must have config path')
+        if args.title is None:
+            raise Exception('in add mode, must have title')
+    elif args.mode == 'delete':
+        if args.pid is None:
+            raise Exception('in delete mode, must have pid')
 
     try:
         os.mkfifo(JOBS)

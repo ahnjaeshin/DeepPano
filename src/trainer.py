@@ -115,7 +115,7 @@ class Trainer():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __call__(self, batch_size = 16, num_workers = 32, epochs = 100, log_freq = 10):
+    def __call__(self, *args, **kwargs):
         """Call trainer
         Does train, ensemble, etc.. as needed
         
@@ -189,7 +189,9 @@ class Trainer():
         metric_geometric_scores = [GeometricMeter() for metric in self.metrics]
         curr_scores = AverageMeter() # average of all metrics
 
-        result = ClassMeter()
+        both_result = ClassMeter()
+        major_result = ClassMeter()
+        minor_result = ClassMeter()
 
         input_image = ImageMeter(10)
         output_image = ImageMeter(10)
@@ -213,7 +215,9 @@ class Trainer():
                 geo_score.update(metric(output, target), batch_size)
                 curr_scores.update(arith_score.val, batch_size)
             
-            result.update(output, target)
+            both_result.update(output, target)
+            major_result.update(output.narrow(1, 0, 1), target.narrow(1, 0, 1))
+            minor_result.update(output.narrow(1, 1, 1), target.narrow(1, 1, 1))
 
             input_image.update(input)
             output_image.update(output)
@@ -255,13 +259,14 @@ class Trainer():
             
         writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        
         writer.add_image('major/output', make_grid(output_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
 
-        writer.add_pr_curve('segmentation', result.targets, result.outputs, epoch)
+        writer.add_pr_curve('both', both_result.targets, both_result.outputs, epoch)
+        writer.add_pr_curve('major', major_result.targets, major_result.outputs, epoch)
+        writer.add_pr_curve('minor', minor_result.targets, minor_result.outputs, epoch)
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
