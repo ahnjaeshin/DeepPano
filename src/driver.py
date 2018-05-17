@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 import loss
 import metric
 from dataset import PanoSet
-from model import UNet
+from model import *
 from torchvision import transforms
 from trainer import Trainer
 import augmentation as AUG
@@ -28,9 +28,11 @@ import pandas as pd
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
+parser.add_argument("--title", "-t", type=str, help="title of experiment")
 
 FRONT = (11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43)
 writers = {}
+
 class Filter():
     
     def __init__(self, filters):
@@ -94,15 +96,15 @@ class Data(NamedTuple):
     box_mean: float
     box_std : float
 
-def main(config):
+def main(config, title):
     
     ##################
     #     logging    #
     ##################
     config_logging = config["logging"]
-    config_logging_debug = config_logging["debug"]
+    config_logging_logdir = config_logging["logdir"]
+    config_logging_start_time = config_logging["start_time"]
     config_logging_channel = config_logging["slack_channel"]
-    # write title in hierarchical way e.g. UNET/HE/SGD
     config_logging_title = config_logging["title"]
     config_logging_trial = config_logging["trial"]
 
@@ -117,9 +119,11 @@ def main(config):
         torch.backends.cudnn.enabled = False # cudnn library 
         torch.backends.cudnn.deterministic = True
 
-    log_dir = '../result/runs/{title}/{time}_{host}_{trial}/'.format(title=config_logging_title, 
-                                                           time=datetime.datetime.now().strftime('%b%d_%H-%M'), 
-                                                           host=socket.gethostname(), 
+    if title is None:
+        title = config_logging_title
+
+    log_dir = '../result/runs/{title}/{time}_{trial}/'.format(title=title, 
+                                                           time=config_logging_start_time,
                                                            trial=config_logging_trial)
     writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
     
@@ -167,7 +171,7 @@ def main(config):
     ##################
     config_model = config["model"]
 
-    model = UNet(2, 2, **config_model["param"])
+    model = unet.UNet(2, 2, **config_model["param"])
     dummy_input = torch.rand(2, 2, *config_augmentation['size'])
     writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
@@ -226,8 +230,10 @@ def main(config):
     })
     scheduler = schedParser(**config_learning_scheduler)
 
-    try: 
-        trainer = Trainer(model=model, 
+    ##################
+    #    training    #
+    ##################
+    trainer = Trainer(model=model, 
                         datasets=datasets, 
                         criterion=criterion, 
                         optimizer=optimizer, 
@@ -236,30 +242,17 @@ def main(config):
                         writers=writers,
                         checkpoint=config_learning_checkpoint,
                         init=config_learning_weightinit)
-    except KeyboardInterrupt:
-        slack_message('abrupt end', '#botlog')
 
-
-    ##################
-    #    training    #
-    ##################
     slack_message('\n'.join(log))
-    trainer.train(**config["training"])
+    
+    try: 
+        trainer.train(**config["training"])
+    except Exception as e:
+        slack_message('abrupt end, {}'.format(e))
     
     writers['train'].close()
     writers['val'].close()
 
-def killed(signal, frame):
-    print("program abrupt end")
-    slack_message("program abrupt end")
-    writers['train'].close()
-    writers['val'].close()
-    exit(0)
-
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, killed)
     args = parser.parse_args()
-    main(json.load(open(args.config)))
-    # mp = mp.set_start_method("spawn")
-
-# json.dump(config, fp, sort_keys=True, indent=4)
+    main(json.load(open(args.config)), args.title)
