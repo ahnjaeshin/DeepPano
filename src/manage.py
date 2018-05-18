@@ -112,15 +112,11 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
     doAnnot = False if annotFileName == -1 else True
 
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
-    annotPsd = PSDImage.load(annotFileName) if doAnnot else None
-    
-    #if panoImg.shape != annotImg.shape:
-    #    print('panoFile and annotFile sizes do not match')
-    #    return
-
     imgShape = panoImg.shape
-    
-    
+
+    annotPsd = PSDImage.load(annotFileName) if doAnnot else None
+    annotImgs = extractImgsFromPsd(annotPsd, imgShape) # flipped
+
     # XML Parsing
     root = et.parse(xmlFileName).getroot()
 
@@ -160,7 +156,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
             continue
 
-        maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, majorToothNum, majorAnnotImg, minorToothNum, minorAnnotImg = genAnnotImages(annotPsd, boxImg, imgShape) # flipped
+        maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, majorToothNum, majorAnnotImg, minorToothNum, minorAnnotImg = genAnnotImages(annotImgs, boxImg, imgShape) # flipped
         leftMostCoor, cropMajorAnnotImg = cropImageWithMargin(majorAnnotImg, coords, marginType, imgShape)
         cropMajorAnnotImg = cv2.flip(cropMajorAnnotImg, 0) # unflip
         leftMostCoor, cropMinorAnnotImg = cropImageWithMargin(minorAnnotImg, coords, marginType, imgShape)
@@ -206,6 +202,38 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
     return outRows
 
 
+# This function returns flipped imgs
+def extractImgsFromPsd(annotPsd, imgShape):
+
+    annotImgs = {}
+
+    for layer in annotPsd.layers:
+
+        if layer is None or layer.bbox == (0, 0, 0, 0):
+            continue
+
+        layerImg = np.array(layer.as_PIL())
+
+        # get alpha channel from png and convert to grayscale
+        if (layerImg.shape[-1] != 4):
+            # Then this is background image
+            continue
+
+        r, g, b, a = cv2.split(layerImg)
+        layerImg = cv2.merge([a, a, a])
+        layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
+        ret, layerImg = cv2.threshold(layerImg, 200, 255, cv2.THRESH_BINARY)
+
+        annotImg = np.zeros(imgShape, dtype=np.uint8)
+        b1, b2 = layer.bbox.y1, layer.bbox.y2
+        b3, b4 = layer.bbox.x1, layer.bbox.x2
+        annotImg[b1:b2, b3:b4] = layerImg
+        annotImg = cv2.flip(annotImg, 0) # flip
+        annotImgs[layer.name] = annotImg
+
+    return annotImgs
+
+
 def genBoxImage(img, coords):
 
     x1, y1, x2, y2 = 5000, 5000, 0, 0
@@ -230,7 +258,7 @@ def genBoxImage(img, coords):
     return img
 
 
-def genAnnotImages(annotPsd, boxImg, imgShape):
+def genAnnotImages(annotImgs, boxImg, imgShape):
 
     maxIOU = 0
     sndMaxIOU = 0
@@ -242,25 +270,7 @@ def genAnnotImages(annotPsd, boxImg, imgShape):
     sndMaxIOULayerName = 0
     sndMaxIOULayerImg = np.zeros(imgShape, dtype=np.uint8)
 
-    for layer in annotPsd.layers:
-        if layer is None or layer.bbox == (0, 0, 0, 0):
-            continue
-        layerImg = np.array(layer.as_PIL())
-
-        # get alpha channel from png and convert to grayscale
-        if (layerImg.shape[-1] != 4):
-            # Then this is background image
-            continue
-        r, g, b, a = cv2.split(layerImg)
-        layerImg = cv2.merge([a, a, a])
-        layerImg = cv2.cvtColor(layerImg, cv2.COLOR_BGR2GRAY)
-        ret, layerImg = cv2.threshold(layerImg, 200, 255, cv2.THRESH_BINARY)
-
-        annotImg = np.zeros(imgShape, dtype=np.uint8)
-        b1, b2 = layer.bbox.y1, layer.bbox.y2
-        b3, b4 = layer.bbox.x1, layer.bbox.x2
-        annotImg[b1:b2, b3:b4] = layerImg
-        annotImg = cv2.flip(annotImg, 0)
+    for name, annotImg in annotImgs.items():
 
         intersectionImg = cv2.bitwise_and(annotImg, boxImg)
         intersectionArea = np.sum(intersectionImg == 255)
@@ -270,7 +280,7 @@ def genAnnotImages(annotPsd, boxImg, imgShape):
         thisBoxIOU = intersectionArea / boxArea
 
         if thisIOU > 0:
-            print ('layerName: {}, thisIOU: {}'.format(layer.name, thisIOU))
+            print ('layerName: {}, thisIOU: {}'.format(name, thisIOU))
 
         if (maxIOU <  thisIOU):
 
@@ -281,14 +291,14 @@ def genAnnotImages(annotPsd, boxImg, imgShape):
 
             maxIOU = thisIOU
             fstBoxIOU = thisBoxIOU
-            maxIOULayerName = layer.name
+            maxIOULayerName = name
             maxIOULayerImg = annotImg
 
         elif (sndMaxIOU < thisIOU):
 
             sndMaxIOU = thisIOU
             sndBoxIOU = thisBoxIOU
-            sndMaxIOULayerName = layer.name
+            sndMaxIOULayerName = name
             sndMaxIOULayerImg = annotImg
 
     return (maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, maxIOULayerName, maxIOULayerImg, sndMaxIOULayerName, sndMaxIOULayerImg)
