@@ -494,33 +494,79 @@ def genPretrain(fileName):
 
     # TODO: columns check?
 
-    outputFormat = Pretrain + inputFileName[17:-4] + '-' + str(marginType)
+    outputFormat = "Pretrain-" + fileName[17:-4]
     outImgPath = '../data/metadata/' + outputFormat + '/'
-    outCsvFileName = '../data/metadata/' + outputFormat + '-' + str(segCriterion) + '.csv'
+    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
     if (os.path.exists(outImgPath)):
         print('directory already exists for outImgPath' + outImgPath)
         # return
     else:
         os.mkdir(outImgPath)
-    if not os.path.exists(outImgPath + str(segCriterion) + '/'):
-        os.mkdir(outImgPath + str(segCriterion) + '/')
 
     print('outputRoute: {}'.format(outputFormat))
 
-    outCols = ['Name', 'Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Major.Annot.Img', 'Cropped.Minor.Annot.Img',
-            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Major.Annot', 'Tooth.Num.Minor.Annot',
-            'Max.Teeth.IOU', '2nd.Max.Teeth.IOU', 'Max.Box.IOU', '2nd.Max.Box.IOU', 'Margin.Type', 'Segmentable.Type',
-            'Major.Target.Img', 'Minor.Target.Img', 'Train.Val']
+    outCols = ['Name', 'Panno.Img', 'Target.Img', 'All.Img', 'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
-        rows.extend(generateDatasetForEachFile(marginType, segCriterion, outImgPath, row))
+        rows.append(genPretrainForEachFile(outImgPath, row))
    
     outputDf = pd.DataFrame(rows, columns=outCols)
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
 
     return
 
+
+def genPretrainForEachFile(outImgPath, row):
+
+    print('row: {}'.format(row))
+    imageTitle = row['Image.Title']
+    panoFileName = row['Pano.File']
+    annotFileName = row['Annot.File']
+
+    if annotFileName == -1:
+        print("Inappropriate annotFileName. skip.")
+        return None
+
+    piName = outImgPath + 'panoImg' + '-' + imageTitle + '.jpg'
+    tiName = re.sub('panoImg', 'targetImg', piName)
+    aiName = re.sub('panoImg', 'allImg', piName)
+
+    panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0) # flipped
+    imgShape = panoImg.shape
+
+    annotPsd = PSDImage.load(annotFileName)
+    annotImgs = extractImgsFromPsd(annotPsd, imgShape) # flipped
+
+    targetImg = genPretrainTarget(annotImgs, imgShape) # flipped
+
+    allImg = cv2.copyMakeBorder(panoImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE) # flipped
+    cv2.addWeighted(cv2.add(panoImg, targetImg), 0.6, allImg, 0.4, 0, allImg)
+
+    # unflip
+    panoImg = cv2.flip(panoImg, 0)
+    targetImg = cv2.flip(targetImg, 0)
+    allImg = cv2.flip(allImg, 0)
+
+    # export images
+    cv2.imwrite(piName, panoImg)
+    cv2.imwrite(tiName, targetImg)
+    cv2.imwrite(aiName, allImg)
+
+    # write row for .csv
+    newRow = [imageTitle, piName, tiName, aiName, row['Train.Val']]
+
+    return newRow
+
+
+def genPretrainTarget(annotImgs, imgShape):
+
+    targetImg = np.zeros(imgShape, dtype=np.uint8)
+
+    for name, annotImg in annotImgs.items():
+        targetImg = cv2.add(targetImg, annotImg)
+
+    return targetImg
 
 
 if __name__ == '__main__':
