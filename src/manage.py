@@ -4,6 +4,8 @@ python3 manage.py genData (marginType) (inputFileName)
 
 python3 manage.py genStat (fileName)
 
+python3 manage.py genPretrain (fileName)
+
 
 '''
 
@@ -26,7 +28,8 @@ def __main__():
     if len(sys.argv) < 2:
         print('need to input commands\n',
                 'genData (marginType) (inputFileName), or\n',
-                'genStat (fileName)')
+                'genStat (fileName)\n',
+                'genPretrain (fileName)')
         return
     
     command = str(sys.argv[1])
@@ -44,6 +47,12 @@ def __main__():
             return
         fileName = str(sys.argv[2])
         calcStat(fileName)
+    elif command == "genPretrain":
+        if len(sys.argv) != 3:
+            print('need to input fileName\n')
+            return
+        fileName = str(sys.argv[2])
+        genPretrain(fileName)
     else:
         print('need to type in command')
 
@@ -462,6 +471,56 @@ def calcStat(fileName):
     print("None: {}, Single: {}, Double: {}".format(noneCount, singleCount, doubleCount))
 
     return
+
+
+###################
+#   GenPretrain   #
+###################
+
+
+def genPretrain(fileName):
+
+    try:
+        inputDf = pd.read_csv(fileName)
+    except IOError:
+        print('cannot read file')
+        return
+
+    rowNum, colNum = inputDf.shape
+    
+    if colNum != 5: # TODO: temporary
+        print('wrong number of columns')
+        return
+
+    # TODO: columns check?
+
+    outputFormat = Pretrain + inputFileName[17:-4] + '-' + str(marginType)
+    outImgPath = '../data/metadata/' + outputFormat + '/'
+    outCsvFileName = '../data/metadata/' + outputFormat + '-' + str(segCriterion) + '.csv'
+    if (os.path.exists(outImgPath)):
+        print('directory already exists for outImgPath' + outImgPath)
+        # return
+    else:
+        os.mkdir(outImgPath)
+    if not os.path.exists(outImgPath + str(segCriterion) + '/'):
+        os.mkdir(outImgPath + str(segCriterion) + '/')
+
+    print('outputRoute: {}'.format(outputFormat))
+
+    outCols = ['Name', 'Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Major.Annot.Img', 'Cropped.Minor.Annot.Img',
+            'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Major.Annot', 'Tooth.Num.Minor.Annot',
+            'Max.Teeth.IOU', '2nd.Max.Teeth.IOU', 'Max.Box.IOU', '2nd.Max.Box.IOU', 'Margin.Type', 'Segmentable.Type',
+            'Major.Target.Img', 'Minor.Target.Img', 'Train.Val']
+    rows = []
+
+    for idx, row in inputDf.iterrows():
+        rows.extend(generateDatasetForEachFile(marginType, segCriterion, outImgPath, row))
+   
+    outputDf = pd.DataFrame(rows, columns=outCols)
+    outputDf.to_csv(outCsvFileName, encoding='utf-8')
+
+    return
+
 
 
 if __name__ == '__main__':
