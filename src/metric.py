@@ -73,6 +73,12 @@ class ClassificationMetric(Metric):
         # image (batch_size, channel, W, H)
         # do nothing if mode is 'both'
 
+        batch_size = output.size(0)
+        channel = output.size(1)
+
+        output = output.view(batch_size, channel, -1)
+        target = target.view(batch_size, channel, -1)
+
         if self.mode == 'major':
             output = output.narrow(1, 0, 1)
             target = target.narrow(1, 0, 1)
@@ -80,17 +86,15 @@ class ClassificationMetric(Metric):
             output = output.narrow(1, 1, 1)
             target = target.narrow(1, 1, 1)
 
-        output = output.sum(dim=3).sum(dim=2)
-        target = target.sum(dim=3).sum(dim=2)
+        output = (output > self.threshold).byte()
+        # (batch_size, channel, ?) of 0, 1
+        output = output.numpy().any(axis=2)
+        target = target.numpy().any(axis=2)
         # (batch_size, channel)
-        
-        output = (output > self.threshold).float()
-        target = (target > self.threshold).float()
-
-        output = output.sum(dim=1)
-        target = target.sum(dim=1)
+        output = output.sum(axis=1)
+        target = target.sum(axis=1)
             
-        return self.eval(output.numpy(), target.numpy())
+        return self.eval(output, target)
 
     def __repr__(self):
         return '/{}/{}'.format(self.threshold, self.mode)
@@ -108,8 +112,7 @@ class Accuracy(ClassificationMetric):
 
     def __repr__(self):
         return 'accuracy' + super(Accuracy, self).__repr__()
-
-
+        
 class IOU(SegmentationMetric):
 
     def __init__(self, threshold = 0.5, mode='both'):

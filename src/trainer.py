@@ -202,7 +202,7 @@ class Trainer():
         output_image = ImageMeter(16)
         target_image = ImageMeter(16)
 
-        confusion = ConfusionMatrix(threshold=1)
+        confusion = ConfusionMatrix(threshold=0.5)
 
         start = time.time()
         for input, target, index in dataloader:
@@ -235,7 +235,7 @@ class Trainer():
         else:
             is_best = self.best_score < curr_scores.avg
             self.best_score = max(self.best_score, curr_scores.avg)
-            self.save_checkpoint(epoch, is_best)
+            self.save_checkpoint(epoch, is_best, do_log)
 
         # log ()
         log = [ '{0}'.format('train' if train else 'val'), ]
@@ -303,10 +303,10 @@ class Trainer():
     def ensemble(self):
         pass        
 
-    def save_checkpoint(self, epoch, is_best):
+    def save_checkpoint(self, epoch, is_best, do_log):
 
-        if epoch < self.epochs // 3:
-            return # too many checkpoints!!
+        if not do_log or not is_best:
+            return
 
         if torch.cuda.device_count() > 1:
             model = self.model.module
@@ -322,9 +322,12 @@ class Trainer():
             'best_score': self.best_score,
             'optimizer' : self.optimizer.state_dict(),
         }
-        torch.save(state, filename)
-        if is_best:
-            shutil.copyfile(filename, "../result/checkpoint/best-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch))
+        if do_log:
+            torch.save(state, filename)
+            if is_best:
+                shutil.copyfile(filename, "../result/checkpoint/best-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch))
+        else:
+            torch.save(state, "../result/checkpoint/best-{}-{}.pth.tar".format(datetime.datetime.now().strftime('%Y-%m-%d:%H:%M'), epoch))
 
     def load(self, path):
         if os.path.isfile(path):

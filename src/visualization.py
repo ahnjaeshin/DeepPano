@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import seaborn as sns
 import itertools
-
+import scipy.ndimage
 
 import matplotlib.pyplot as plt
 
@@ -44,20 +44,28 @@ class ConfusionMatrix():
         self.threshold = threshold
     
     def __call__(self, output, target):
-        # image (batch_size, channel, W, H)
+        # image (batch_size, channel, W, H) of 0 ~ 1
+        batch_size = output.size(0)
+        channel = output.size(1)
 
-        output = output.sum(dim=3).sum(dim=2)
-        target = target.sum(dim=3).sum(dim=2)
+        output = output.view(batch_size, channel, -1)
+        target = target.view(batch_size, channel, -1)
+
+        output = (output > self.threshold).byte()
+        # (batch_size, channel, ?) of 0, 1
+        output = output.numpy().any(axis=2)
+        target = target.numpy().any(axis=2)
         # (batch_size, channel)
-        output = (output > self.threshold).float().sum(dim=1).numpy().astype(int)
-        target = (target > self.threshold).float().sum(dim=1).numpy().astype(int)
+        output = output.sum(axis=1)
+        target = target.sum(axis=1)
 
         assert (output.shape == target.shape)
 
         # (batch_size) of 0, 1, 2
 
         classes = set(np.unique(target))
-        matrix = torch.zeros((len(classes), len(classes)))
+        classes_len = len(classes)
+        matrix = np.zeros((classes_len, classes_len))
 
         output = list(output)
         target = list(target)
@@ -65,16 +73,18 @@ class ConfusionMatrix():
         print(output, target)
 
         for o, t in zip(output, target):
-            matrix[o][t] += 1
+            matrix[t][o] += 1
 
-        print(matrix)
-        
-        matrix = matrix / matrix.sum(dim=0, keepdim=True)
-        matrix = matrix * 255
-        
-        
+        matrix = matrix / matrix.sum(axis=1, keepdims=True)
+        matrix = matrix * 200 + 55
 
-        return matrix
+        print (matrix.shape)
+
+        matrix = scipy.ndimage.zoom(matrix, 10, order=0)
+
+        print (matrix.shape)
+
+        return torch.from_numpy(matrix)
 
     def __repr__(self):
         return 'confusion'
