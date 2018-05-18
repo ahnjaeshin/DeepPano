@@ -1,7 +1,7 @@
 {
     "logging": {
         "logdir": true,
-        "title": "test",
+        "title": "pretrain",
         "start_time": "",
         "description": "for validation",
         "trial": 3,
@@ -10,17 +10,25 @@
 
     "augmentation": {
         "size": [64, 32],
-        "train": [],
-        "val": []
+        "train": [
+            { "category": "All", "type": "HFlip" },
+            { "category": "All", "type": "VFlip" },
+            { "category": "All", "type": "Rotate",
+                "param": { "degrees": [-40, 40] }},
+            { "category": "All", "type": "Crop", "param": {"size": [512, 256], "pad_if_needed": true} }
+        ],
+        "val": [
+            { "category": "All", "type": "Crop", "param": {"size": [512, 256], "pad_if_needed": true} }
+        ]
     },
 
     "dataset": {
-        "pretrain": false,
+        "pretrain": true,
         "data-dir": "../data/Stat-DataSet.csv",
-        "name": "ThirdSet-10-mini",
+        "name": "Pretrain-ThirdSet-mini",
         "filter": {
-            "train": [ "train" ],
-            "val": [ "val" ]
+            "train": [],
+            "val": []
         }
     },
 
@@ -74,7 +82,7 @@
     },
 
     "training": {
-        "epochs": 200,
+        "epochs": 100,
         "batch_size": 10,
         "num_workers": 16,
         "log_freq": 10

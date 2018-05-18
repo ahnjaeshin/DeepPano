@@ -17,7 +17,7 @@ import traceback
 
 import loss
 import metric
-from dataset import PanoSet
+from dataset import PanoSet, PretrainPanoSet
 from model import *
 from torchvision import transforms
 from trainer import Trainer
@@ -38,14 +38,14 @@ class Filter():
     
     def __init__(self, filters):
         lookup = {
-            "train" : lambda row: row['Train.Val'] == 'train',
-            "val" : lambda row: row['Train.Val'] == 'val',
+            "train" : lambda row: row['Train.Val'] == 'train' and int(row['Segmentable.Type']) > 0,
+            "val" : lambda row: row['Train.Val'] == 'val' and int(row['Segmentable.Type']) > 0,
             "easy": lambda row: int(row['Segmentable.Type']) <= 10,
             "segmentable": lambda row: int(row['Segmentable.Type']) < 10,
             "unsegmentable": lambda row: int(row['Segmentable.Type']) >= 10,
             "front-teeth": lambda row: int(row['Tooth.Num.Annot']) in FRONT,
         }
-        self.func = [lambda row: int(row['Segmentable.Type']) > 0]
+        self.func = []
         self.func += [lookup[f] for f in filters]
 
     def __call__(self, row):
@@ -61,6 +61,7 @@ def getAugmentation(augments, param):
             "HFlip": transforms.RandomHorizontalFlip,
             "VFlip": transforms.RandomVerticalFlip,
             "Rotate": transforms.RandomRotation,
+            "Crop": transforms.RandomCrop,
         }
 
         categories = {
@@ -139,6 +140,7 @@ def main(config, title):
     config_data_path = config_dataset["data-dir"]
     config_data_name = config_dataset["name"]
     config_dataset_filter = config_dataset["filter"]
+    config_dataset_pretrain = config_dataset["pretrain"]
 
     df = pd.read_csv(config_data_path)
     data = df.loc[df['DataSet.Title'] == config_data_name].iloc[0]
@@ -158,9 +160,12 @@ def main(config, title):
 
     print(augmentation_param)
 
+    
+    dataset = PretrainPanoSet if config_dataset_pretrain else PanoSet
+
     augmentations = {x : getAugmentation(config_augmentation[x], augmentation_param) for x in ('train', 'val')}    
 
-    datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])
+    datasets = { x: dataset(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
     LOG('dataset', str(datasets['train']), str(datasets['val']))
@@ -253,7 +258,7 @@ def main(config, title):
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
 
-    
+
 
     writers['train'].close()
     writers['val'].close()

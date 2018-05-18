@@ -297,7 +297,7 @@ class Trainer():
         return loss, output
 
     def infer(self):
-        
+        pass
 
     def search(self):
         pass

@@ -63,7 +63,7 @@ class ConfusionMatrix():
         # (batch_size) of 0, 1, 2
 
         classes = set(np.unique(target))
-        classes_len = len(classes)
+        classes_len = 3
         matrix = np.zeros((classes_len, classes_len))
 
         output = list(output)
