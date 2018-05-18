@@ -20,7 +20,6 @@ import torch.optim as optim
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from torchvision.utils import make_grid
 from torchvision import datasets
@@ -28,6 +27,8 @@ from torch.autograd import Variable
 
 from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, ClassMeter
 import shutil
+
+from visualization import ConfusionMatrix
 
 class Pipeline:
     def __init__(self, *pipe):
@@ -89,7 +90,7 @@ class Trainer():
         ensemble!!
     """
 
-    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, writers, checkpoint=None, init=None):
+    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, writers, path, checkpoint=None, init=None):
         
         self.model = model
         self.datasets = datasets
@@ -97,9 +98,11 @@ class Trainer():
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.metrics = metrics
+        self.path = path
         self.checkpoint = checkpoint
         self.writers = writers
 
+        self.epochs = 0
         self.start_epoch = 0
         self.best_score = 0
         self.init = Init(init)
@@ -129,6 +132,8 @@ class Trainer():
         
     def train(self, batch_size, num_workers, epochs, log_freq):
         
+        self.epochs = epochs
+        
         slack_message('train started', '#botlog')
         slack_message('using {} gpus'.format(torch.cuda.device_count()))
 
@@ -153,7 +158,7 @@ class Trainer():
         start_time = datetime.datetime.now()
         self.best_score = 0
 
-        for epoch in tqdm(range(self.start_epoch, epochs), desc='epoch'):
+        for epoch in range(self.start_epoch, epochs):
             do_log = ((epoch + 1) % log_freq == 0)
 
             for state in ('train', 'val'):
@@ -163,7 +168,7 @@ class Trainer():
             eta = start_time + ((elasped_time / ((epoch - self.start_epoch) + 1)) * (epochs - self.start_epoch))
 
             log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
-            tqdm.write(log)
+            print(log)
             if do_log:
                 slack_message(log, '#botlog')
 
@@ -193,12 +198,14 @@ class Trainer():
         major_result = ClassMeter()
         minor_result = ClassMeter()
 
-        input_image = ImageMeter(10)
-        output_image = ImageMeter(10)
-        target_image = ImageMeter(10)
+        input_image = ImageMeter(16)
+        output_image = ImageMeter(16)
+        target_image = ImageMeter(16)
+
+        confusion = ConfusionMatrix(threshold=1)
 
         start = time.time()
-        for batch_idx, (input, target, index) in enumerate(tqdm(dataloader, desc='batch')):
+        for input, target, index in dataloader:
             data_times.update(time.time() - start)
             batch_size = input.size(0)
 
@@ -249,10 +256,10 @@ class Trainer():
                 writer.add_histogram(tag + '/grad', value, epoch, bins='doane')
 
         for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
-            write_scalar_log('metric/arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
-            write_scalar_log('metric/geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
+            write_scalar_log('arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
+            write_scalar_log('geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
 
-        tqdm.write("\n".join(log))
+        print("\n".join(log))
 
         if do_log:
             slack_message("\n".join(log), '#botlog')
@@ -263,6 +270,8 @@ class Trainer():
         writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+
+        writer.add_image('confusion', confusion(output_image.images, target_image.images), epoch)
 
         writer.add_pr_curve('both', both_result.targets, both_result.outputs, epoch)
         writer.add_pr_curve('major', major_result.targets, major_result.outputs, epoch)
@@ -296,6 +305,9 @@ class Trainer():
 
     def save_checkpoint(self, epoch, is_best):
 
+        if epoch < self.epochs // 3:
+            return # too many checkpoints!!
+
         if torch.cuda.device_count() > 1:
             model = self.model.module
         else:
@@ -316,17 +328,21 @@ class Trainer():
 
     def load(self, path):
         if os.path.isfile(path):
-            tqdm.write("=> loading checkpoint '{}'".format(path))
+            print("=> loading checkpoint '{}'".format(path))
             slack_message("=> loading checkpoint '{}'".format(path))
 
             checkpoint = torch.load(path)
+
+            if checkpoint['model'] is not self.model.__class__.__name__:
+                raise Exception('model name does not match: checkpoint: {}, model: {}'.format(checkpoint['model'], self.model.__class__.__name__))
+
             self.start_epoch = checkpoint['epoch']
             self.best_score = checkpoint['best_score']
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
 
-            tqdm.write("=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
+            print("=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
             slack_message("=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
         else:
-            tqdm.write("=> no checkpoint found at '{}'".format(path))
+            print("=> no checkpoint found at '{}'".format(path))
             slack_message("=> no checkpoint found at '{}'".format(path))

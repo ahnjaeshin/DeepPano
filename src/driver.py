@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import signal
 from tensorboardX import SummaryWriter
+import traceback
 
 import loss
 import metric
@@ -193,6 +194,7 @@ def main(config, title):
     metricParser = TypeParser(table = {
         "IOU": metric.IOU, 
         "DICE": metric.DICE,
+        "accuracy": metric.Accuracy,
     })
     metrics = [metricParser(**m) for m in config_metrics]
 
@@ -240,6 +242,7 @@ def main(config, title):
                         scheduler=scheduler, 
                         metrics=metrics, 
                         writers=writers,
+                        path=log_dir + 'train',
                         checkpoint=config_learning_checkpoint,
                         init=config_learning_weightinit)
 
@@ -249,6 +252,8 @@ def main(config, title):
         trainer.train(**config["training"])
     except Exception as e:
         slack_message('abrupt end, {}'.format(e))
+        print('abrupt end, {}'.format(e))
+        print(traceback.format_exc())
     
     writers['train'].close()
     writers['val'].close()
