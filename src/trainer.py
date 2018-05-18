@@ -25,7 +25,7 @@ from torchvision.utils import make_grid
 from torchvision import datasets
 from torch.autograd import Variable
 
-from utils import slack_message, AverageMeter, GeometricMeter, ImageMeter, ClassMeter
+from utils import AverageMeter, GeometricMeter, ImageMeter, ClassMeter
 import shutil
 
 from visualization import ConfusionMatrix
@@ -90,7 +90,8 @@ class Trainer():
         ensemble!!
     """
 
-    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, writers, path, checkpoint=None, init=None):
+    def __init__(self, model, datasets, criterion, optimizer, scheduler, metrics, 
+                writers, LOG, path, checkpoint=None, init=None):
         
         self.model = model
         self.datasets = datasets
@@ -101,6 +102,7 @@ class Trainer():
         self.path = path
         self.checkpoint = checkpoint
         self.writers = writers
+        self.LOG = LOG
 
         self.epochs = 0
         self.start_epoch = 0
@@ -134,11 +136,7 @@ class Trainer():
         
         self.epochs = epochs
         
-        slack_message('train started', '#botlog')
-        slack_message('using {} gpus'.format(torch.cuda.device_count()))
-
-        global_data_times = AverageMeter()
-        global_propagate_times = AverageMeter()
+        self.LOG('train', 'train started: using {} gpus'.format(torch.cuda.device_count()))
 
         dataloaders = { x: DataLoader(dataset = self.datasets[x], 
                                       batch_size = batch_size, 
@@ -161,18 +159,23 @@ class Trainer():
         for epoch in range(self.start_epoch, epochs):
             do_log = ((epoch + 1) % log_freq == 0)
 
+            log = []
             for state in ('train', 'val'):
-                self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], do_log)
-            
+                log_i, score = self.train_once(epoch, dataloaders[state], state == 'train', self.writers[state], do_log)
+                log += log_i
+
+                is_best = self.best_score < score
+                self.best_score = max(self.best_score, score)
+                self.save_checkpoint(epoch, is_best, do_log)
+
             elasped_time = datetime.datetime.now() - start_time
             eta = start_time + ((elasped_time / ((epoch - self.start_epoch) + 1)) * (epochs - self.start_epoch))
 
-            log = 'epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta)
-            print(log)
+            print('\n'.join(log))
             if do_log:
-                slack_message(log, '#botlog')
+                self.LOG('epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta), *log)
 
-        slack_message('train ended', '#botlog')
+        self.LOG('train ended', '')
 
     def train_once(self, epoch, dataloader, train, writer, do_log=True):
         """one epoch with logging
@@ -232,10 +235,6 @@ class Trainer():
 
         if train:
             self.scheduler.step()
-        else:
-            is_best = self.best_score < curr_scores.avg
-            self.best_score = max(self.best_score, curr_scores.avg)
-            self.save_checkpoint(epoch, is_best, do_log)
 
         # log ()
         log = [ '{0}'.format('train' if train else 'val'), ]
@@ -258,11 +257,6 @@ class Trainer():
         for metric, arith_score, geo_score in zip(self.metrics, metric_scores, metric_geometric_scores):
             write_scalar_log('arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
             write_scalar_log('geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
-
-        print("\n".join(log))
-
-        if do_log:
-            slack_message("\n".join(log), '#botlog')
             
         writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
         writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
@@ -276,6 +270,8 @@ class Trainer():
         writer.add_pr_curve('both', both_result.targets, both_result.outputs, epoch)
         writer.add_pr_curve('major', major_result.targets, major_result.outputs, epoch)
         writer.add_pr_curve('minor', minor_result.targets, minor_result.outputs, epoch)
+
+        return log, curr_scores.avg
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
@@ -295,7 +291,13 @@ class Trainer():
                 output = self.model(input)
             loss = self.criterion(output, target)
 
-        return loss.cpu().item(), cpu(output)
+        output = cpu(output)
+        loss = loss.cpu().item()
+
+        return loss, output
+
+    def infer(self):
+        
 
     def search(self):
         pass
@@ -305,7 +307,7 @@ class Trainer():
 
     def save_checkpoint(self, epoch, is_best, do_log):
 
-        if not do_log or not is_best:
+        if not do_log and not is_best:
             return
 
         if torch.cuda.device_count() > 1:
@@ -332,7 +334,7 @@ class Trainer():
     def load(self, path):
         if os.path.isfile(path):
             print("=> loading checkpoint '{}'".format(path))
-            slack_message("=> loading checkpoint '{}'".format(path))
+            self.LOG('checkpointing', "=> loading checkpoint '{}'".format(path))
 
             checkpoint = torch.load(path)
 
@@ -345,7 +347,7 @@ class Trainer():
             self.optimizer.load_state_dict(checkpoint['optimizer'])
 
             print("=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
-            slack_message("=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
+            self.LOG('checkpoint', "=> loaded checkpoint '{}' (epoch {})".format(path, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(path))
-            slack_message("=> no checkpoint found at '{}'".format(path))
+            self.LOG('checkpoint', "=> no checkpoint found at '{}'".format(path))

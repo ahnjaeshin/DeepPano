@@ -47,10 +47,16 @@ class SegmentationMetric(Metric):
             output = output.narrow(1, 1, 1)
             target = target.narrow(1, 1, 1)
 
-        output = output.view(batch_size, -1)
-        target = target.view(batch_size, -1)
+        output = output.view(batch_size, -1).numpy()
+        target = target.view(batch_size, -1).numpy()
+
+        assert output.shape == target.shape
+        assert (output <= 1).all() and (output >= 0).all()
+        assert set(np.unique(target)).issubset({0,1})
+
+        output = (output > self.threshold).astype(int)
             
-        return self.eval(output.numpy(), target.numpy())
+        return self.eval(output, target)
 
     def __repr__(self):
         return '/{}/{}'.format(self.threshold, self.mode)
@@ -112,21 +118,35 @@ class Accuracy(ClassificationMetric):
 
     def __repr__(self):
         return 'accuracy' + super(Accuracy, self).__repr__()
+
+class F1(ClassificationMetric):
+    
+    def __init__(self, threshold = 0.5, mode='major'):
+        super(F1, self).__init__(threshold, mode)
+        assert (mode is not 'both')
+
+    def eval(self, output, target):
         
+        union = np.logical_or(output, target).sum()
+        intersection = np.logical_and(output, target).sum()
+
+        if union == 0:
+            return 1
+        
+        return (intersection + intersection) / (union + intersection)
+
+    def __repr__(self):
+        return 'f1' + super(F1, self).__repr__()
+
 class IOU(SegmentationMetric):
 
     def __init__(self, threshold = 0.5, mode='both'):
         super(IOU, self).__init__(threshold, mode)
 
     def eval(self, output, target):
-
-        assert output.shape == target.shape
-        assert (output <= 1).all() and (output >= 0).all()
-        assert set(np.unique(target)).issubset({0,1})
-
-        out = (output > self.threshold).astype(int)
-        union = np.logical_or(out, target).sum(axis=-1)
-        intersection = np.logical_and(out, target).sum(axis=-1)
+        
+        union = np.logical_or(output, target).sum(axis=-1)
+        intersection = np.logical_and(output, target).sum(axis=-1)
 
         zero_indicies = np.where(union == 0)
         union[zero_indicies] = 1
@@ -144,13 +164,8 @@ class DICE(SegmentationMetric):
 
     def eval(self, output, target):
 
-        assert output.shape == target.shape
-        assert (output <= 1).all() and (output >= 0).all()
-        assert set(np.unique(target)).issubset({0,1})
-    
-        out = (output > self.threshold).astype(int)
-        union = np.logical_or(out, target).sum(axis=-1)
-        intersection = np.logical_and(out, target).sum(axis=-1)
+        union = np.logical_or(output, target).sum(axis=-1)
+        intersection = np.logical_and(output, target).sum(axis=-1)
 
         zero_indicies = np.where(union == 0)
         union[zero_indicies] = 1

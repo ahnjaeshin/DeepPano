@@ -115,7 +115,6 @@ def run(experiment, experimentNum):
     p = subprocess.Popen(command, env=env, universal_newlines=True, stdout=logfile)
     running[p.pid] = experiment, logfile, p
     
-    slack_message('new experiment pid({})'.format(p.pid))
     print('new experiment pid({})'.format(p.pid))
 
 
@@ -136,13 +135,12 @@ def watch():
                     pid = int(e.split(':')[1])
                     if pid not in running:
                         print("process with pid {} not found".format(pid))
-                        return
+                        continue
                     
                     _, _, p = running[pid]
                     p.kill()
-                    slack_message("process with pid {} deleted".format(pid))
                     print("process with pid {} deleted".format(pid))
-                    return
+                    continue
 
                 print("New experiment queued: {}".format(experimentNum))
                 experimentNum += 1

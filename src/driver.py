@@ -103,9 +103,7 @@ def main(config, title):
     #     logging    #
     ##################
     config_logging = config["logging"]
-    config_logging_logdir = config_logging["logdir"]
     config_logging_start_time = config_logging["start_time"]
-    config_logging_channel = config_logging["slack_channel"]
     config_logging_title = config_logging["title"]
     config_logging_trial = config_logging["trial"]
 
@@ -131,8 +129,8 @@ def main(config, title):
     writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
     
     # need better way
-    log = []
-    slack_message(json.dumps(config), config_logging_channel)
+    LOG = slack_message(title)
+    LOG('config', json.dumps(config))
     
     ##################
     #     dataset    #
@@ -165,9 +163,7 @@ def main(config, title):
     datasets = { x: PanoSet(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
-
-    log.append(str(datasets['train']))
-    log.append(str(datasets['val']))
+    LOG('dataset', str(datasets['train']), str(datasets['val']))
 
     ##################
     #      model     #
@@ -181,8 +177,8 @@ def main(config, title):
     # writers['train'].add_graph_onnx("graph.proto")
     model_sum = model_summary(model, input_size=(2, 224, 224))
     writers['train'].add_scalar('number of parameter', count_parameters(model))
-    slack_message(model.__repr__(), config_logging_channel)
-    slack_message(model_sum, config_logging_channel)
+    LOG('model', model.__repr__())
+    LOG('model summary', model_sum)
 
     ##################
     #   evaluation   #
@@ -197,6 +193,7 @@ def main(config, title):
         "IOU": metric.IOU, 
         "DICE": metric.DICE,
         "accuracy": metric.Accuracy,
+        "f1": metric.F1,
     })
     metrics = [metricParser(**m) for m in config_metrics]
 
@@ -244,19 +241,20 @@ def main(config, title):
                         scheduler=scheduler, 
                         metrics=metrics, 
                         writers=writers,
+                        LOG=LOG,
                         path=log_dir + 'train',
                         checkpoint=config_learning_checkpoint,
                         init=config_learning_weightinit)
 
-    slack_message('\n'.join(log))
-    
     try: 
         trainer.train(**config["training"])
     except Exception as e:
-        slack_message('abrupt end, {}'.format(e))
+        LOG('warning', 'abrupt end, {}'.format(e))
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
+
     
+
     writers['train'].close()
     writers['val'].close()
 

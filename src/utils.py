@@ -234,7 +234,7 @@ def timer(func):
     """
     pass
 
-def slack_message(text, channel=None):
+class slack_message:
     """send slack message
     
     Arguments:
@@ -244,20 +244,20 @@ def slack_message(text, channel=None):
         channel {string} -- the name of channel to send to (default: channel #botlog)
     """
 
-    
-    slack_token = os.environ["SLACK_API_TOKEN"]
+    def __init__(self, name, channel=None):
+        slack_token = os.environ["SLACK_API_TOKEN"]
+        self.slack = Slacker(slack_token)
+        self.host = socket.gethostname() + ' ' + name + '@bot'
 
-    slack = Slacker(slack_token)
-    host = socket.gethostname() + '@bot'
-    
-    if not channel:
-        channel = 'C9ZKLPGBV' # channel id of #botlog channel
+        self.channel = channel    
+        if not channel:
+            self.channel = 'C9ZKLPGBV' # channel id of #botlog channel
 
-    log = {}
-    log['text'] = text
-    # log['mrkdwn_in'] = ["text", "pretext"]
-
-    try:
-        slack.chat.post_message(channel, text=None, attachments=[log], as_user=False, username=host)
-    except Exception as e:
-        print("slack error occured: {}".format(e))
+    def __call__(self, header, *msg):
+        log = {}
+        log['title'] = header
+        log['text'] = '\n'.join(msg)
+        try:
+            self.slack.chat.post_message(self.channel, text=None, attachments=[log], as_user=False, username=self.host)
+        except Exception as e:
+            print("slack error occured: {}".format(e))

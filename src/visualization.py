@@ -60,7 +60,6 @@ class ConfusionMatrix():
         target = target.sum(axis=1)
 
         assert (output.shape == target.shape)
-
         # (batch_size) of 0, 1, 2
 
         classes = set(np.unique(target))
@@ -70,19 +69,12 @@ class ConfusionMatrix():
         output = list(output)
         target = list(target)
 
-        print(output, target)
-
         for o, t in zip(output, target):
             matrix[t][o] += 1
 
         matrix = matrix / matrix.sum(axis=1, keepdims=True)
         matrix = matrix * 200 + 55
-
-        print (matrix.shape)
-
         matrix = scipy.ndimage.zoom(matrix, 10, order=0)
-
-        print (matrix.shape)
 
         return torch.from_numpy(matrix)
 
