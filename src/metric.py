@@ -55,6 +55,60 @@ class SegmentationMetric(Metric):
     def __repr__(self):
         return '/{}/{}'.format(self.threshold, self.mode)
         
+class ClassificationMetric(Metric):
+    """image into 0 (None), 1 (Single), 2 (Double)
+        
+    Arguments:
+        threshold {int} -- 0 ~ 1 float
+    
+    Keyword Arguments:
+        mode {str} -- both, major, minor (default: {'BOTH'})
+    """
+    
+    def __init__(self, threshold, mode='both'):
+        super(ClassificationMetric, self).__init__(threshold)
+        self.mode = mode
+    
+    def __call__(self, output, target):
+        # image (batch_size, channel, W, H)
+        # do nothing if mode is 'both'
+
+        if self.mode == 'major':
+            output = output.narrow(1, 0, 1)
+            target = target.narrow(1, 0, 1)
+        elif self.mode == 'minor':
+            output = output.narrow(1, 1, 1)
+            target = target.narrow(1, 1, 1)
+
+        output = output.sum(dim=3).sum(dim=2)
+        target = target.sum(dim=3).sum(dim=2)
+        # (batch_size, channel)
+        
+        output = (output > self.threshold).float()
+        target = (target > self.threshold).float()
+
+        output = output.sum(dim=1)
+        target = target.sum(dim=1)
+            
+        return self.eval(output.numpy(), target.numpy())
+
+    def __repr__(self):
+        return '/{}/{}'.format(self.threshold, self.mode)
+        
+class Accuracy(ClassificationMetric):
+    
+    def __init__(self, threshold = 0.5, mode = 'both'):
+        super(Accuracy, self).__init__(threshold, mode)
+    
+    def eval(self, output, target):
+        # (batch size) => each element is 0, 1, 2
+        length = output.shape
+
+        return ((output == target).sum() / length)[0]
+
+    def __repr__(self):
+        return 'accuracy' + super(Accuracy, self).__repr__()
+
 
 class IOU(SegmentationMetric):
 
