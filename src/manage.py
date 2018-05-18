@@ -1,6 +1,6 @@
 '''
 
-python3 manage.py genData (marginType) (segCriterion) (inputFileName)
+python3 manage.py genData (marginType) (inputFileName)
 
 python3 manage.py genStat (fileName)
 
@@ -25,20 +25,19 @@ def __main__():
     
     if len(sys.argv) < 2:
         print('need to input commands\n',
-                'genData (marginType) (segCriterion) (inputFileName), or\n',
+                'genData (marginType) (inputFileName), or\n',
                 'genStat (fileName)')
         return
     
     command = str(sys.argv[1])
     
     if command == "genData":
-        if len(sys.argv) != 5:
-            print('need to input marginType and segCriterion inputFileName\n')
+        if len(sys.argv) != 4:
+            print('need to input marginType and inputFileName\n')
             return
         marginType = int(sys.argv[2])
-        segCriterion = float(sys.argv[3])
-        inputFileName = str(sys.argv[4])
-        generateDataset(marginType, segCriterion, inputFileName)
+        inputFileName = str(sys.argv[3])
+        generateDataset(marginType, inputFileName)
     elif command == "genStat":
         if len(sys.argv) != 3:
             print('need to input fileName\n')
@@ -56,7 +55,7 @@ def __main__():
 #######################
 
 
-def generateDataset(marginType, segCriterion, inputFileName):
+def generateDataset(marginType, inputFileName):
     
     try:
         inputDf = pd.read_csv(inputFileName)
@@ -76,25 +75,23 @@ def generateDataset(marginType, segCriterion, inputFileName):
     # TODO: should extract inputFileName from route using regex
     outputFormat = inputFileName[17:-4] + '-' + str(marginType)
     outImgPath = '../data/metadata/' + outputFormat + '/'
-    outCsvFileName = '../data/metadata/' + outputFormat + '-' + str(segCriterion) + '.csv'
+    outCsvFileName = '../data/metadata/' + outputFormat + '.csv'
     if (os.path.exists(outImgPath)):
         print('directory already exists for outImgPath' + outImgPath)
         # return
     else:
         os.mkdir(outImgPath)
-    if not os.path.exists(outImgPath + str(segCriterion) + '/'):
-        os.mkdir(outImgPath + str(segCriterion) + '/')
 
     print('outputRoute: {}'.format(outputFormat))
 
     outCols = ['Name', 'Cropped.Pano.Img', 'Cropped.Box.Img', 'Cropped.Major.Annot.Img', 'Cropped.Minor.Annot.Img',
             'Left.Upmost.Coord', 'Cropped.Img.Size', 'Tooth.Num.Panoseg', 'Tooth.Num.Major.Annot', 'Tooth.Num.Minor.Annot',
             'Max.Teeth.IOU', '2nd.Max.Teeth.IOU', 'Max.Box.IOU', '2nd.Max.Box.IOU', 'Margin.Type', 'Segmentable.Type',
-            'Major.Target.Img', 'Minor.Target.Img', 'Train.Val']
+            'Major.Target.Img', 'Minor.Target.Img', 'All.Img', 'Train.Val']
     rows = []
 
     for idx, row in inputDf.iterrows():
-        rows.extend(generateDatasetForEachFile(marginType, segCriterion, outImgPath, row))
+        rows.extend(generateDatasetForEachFile(marginType, outImgPath, row))
    
     outputDf = pd.DataFrame(rows, columns=outCols)
     outputDf.to_csv(outCsvFileName, encoding='utf-8')
@@ -102,7 +99,7 @@ def generateDataset(marginType, segCriterion, inputFileName):
     return
 
 
-def generateDatasetForEachFile(marginType, segCriterion, outImgPath, row):
+def generateDatasetForEachFile(marginType, outImgPath, row):
 
     outRows = []
 
@@ -157,8 +154,8 @@ def generateDatasetForEachFile(marginType, segCriterion, outImgPath, row):
             cv2.imwrite(cpiName, cropPanoImg)
             cv2.imwrite(cbiName, cropBoxImg)
 
-            newRow = [cpiName, cbiName, -1, leftMostCoor, cropPanoImg.shape, toothNum,
-                    -1, -1, -1, -1, marginType, -1, -1, -1, -1, row['Train.Val']]
+            newRow = [thisTitle, cpiName, cbiName, -1, -1, leftMostCoor, cropPanoImg.shape, toothNum,
+                    -1, -1, -1, -1, -1, -1, marginType, -1, -1, -1, -1, row['Train.Val']]
             outRows.append(newRow)
 
             continue
@@ -170,8 +167,13 @@ def generateDatasetForEachFile(marginType, segCriterion, outImgPath, row):
         cropMinorAnnotImg = cv2.flip(cropMinorAnnotImg, 0) # unflip
 
         segType = decideSegType(maxIOU, sndMaxIOU, fstBoxIOU)
-        majorTargetFlag = genTargetImage(segCriterion, maxIOU, cropMajorAnnotImg, cropBoxImg)
-        minorTargetFlag = genTargetImage(segCriterion, sndMaxIOU, cropMinorAnnotImg, cropBoxImg)
+        majorTargetFlag = decideTargetFlag(maxIOU)
+        minorTargetFlag = decideTargetFlag(sndMaxIOU)
+        majorTargetImg = np.zeros(cropMajorAnnotImg.shape, dtype = np.uint8) if not majorTargetFlag else cropMajorAnnotImg
+        minorTargetImg = np.zeros(cropMinorAnnotImg.shape, dtype = np.uint8) if not minorTargetFlag else cropMinorAnnotImg
+
+        allImg = cv2.copyMakeBorder(inputImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+        cv2.addWeighted(cv2.add(inputImg, cv2.add(majorTargetImg, minorTargetImg)), 0.6, allImg, 0.4, 0, allImg)
 
         # TODO: Wrong tooth number check?
 
@@ -182,31 +184,23 @@ def generateDatasetForEachFile(marginType, segCriterion, outImgPath, row):
         micaiName = outImgPath + 'cropAnnotMinorImg' + '-' + thisTitle + '.jpg'
         matiName = 0 if not majorTargetFlag else re.sub('cropPanoImg', 'targetMajorImg', cpiName)
         mitiName = 0 if not minorTargetFlag else re.sub('cropPanoImg', 'targetMinorImg', cpiName)
+        aiName = re.sub('cropPanoImg', 'allImg', cpiName)
 
         # export images
-        if False:
-            cv2.imwrite(cpiName, cropPanoImg)
-            cv2.imwrite(cbiName, cropBoxImg)
-            cv2.imwrite(macaiName, cropMajorAnnotImg)
-            cv2.imwrite(micaiName, cropMinorAnnotImg)
-            if majorTargetFlag:
-                cv2.imwrite(matiName, cropMajorAnnotImg)
-            if minorTargetFlag:
-                cv2.imwrite(mitiName, cropMinorAnnotImg)
-
-        # for debugging purpose only
-        majorTargetImg = np.zeros(cropMajorAnnotImg.shape, dtype = np.uint8) if not majorTargetFlag else cropMajorAnnotImg
-        minorTargetImg = np.zeros(cropMinorAnnotImg.shape, dtype = np.uint8) if not minorTargetFlag else cropMinorAnnotImg
-        
-        allImg = cv2.copyMakeBorder(inputImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
-        cv2.addWeighted(cv2.add(inputImg, cv2.add(majorTargetImg, minorTargetImg)), 0.6, allImg, 0.4, 0, allImg)
-        aiName = re.sub('cropPanoImg', str(segCriterion) + '/allImg', cpiName)
+        cv2.imwrite(cpiName, cropPanoImg)
+        cv2.imwrite(cbiName, cropBoxImg)
+        cv2.imwrite(macaiName, cropMajorAnnotImg)
+        cv2.imwrite(micaiName, cropMinorAnnotImg)
+        if majorTargetFlag:
+            cv2.imwrite(matiName, cropMajorAnnotImg)
+        if minorTargetFlag:
+            cv2.imwrite(mitiName, cropMinorAnnotImg)
         cv2.imwrite(aiName, allImg)
 
         # write row for .csv
         newRow = [thisTitle, cpiName, cbiName, macaiName, micaiName, leftMostCoor, cropPanoImg.shape, toothNum,
                 majorToothNum, minorToothNum, maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, marginType,
-                segType, matiName, mitiName, row['Train.Val']]
+                segType, matiName, mitiName, aiName, row['Train.Val']]
         outRows.append(newRow)
 
     return outRows
@@ -300,15 +294,15 @@ def genAnnotImages(annotPsd, boxImg, imgShape):
     return (maxIOU, sndMaxIOU, fstBoxIOU, sndBoxIOU, maxIOULayerName, maxIOULayerImg, sndMaxIOULayerName, sndMaxIOULayerImg)
 
 
-def genTargetImage(segCriterion, maxIOU, cropAnnotImg, cropBoxImg):
+def decideTargetFlag(maxIOU):
     # intersectionImg = cv2.bitwise_and(cropAnnotImg, cropBoxImg)
     # intersectionArea = np.sum(intersectionImg == 255)
     # teethArea = np.sum(cropAnnotImg == 255)
     # newMaxIOU = intersectionArea / teethArea
     # if maxIOU < 0.05 or (maxIOU / newMaxIOU) < 0.67:
-    if maxIOU < segCriterion:
-        return False # np.zeros(cropAnnotImg.shape, dtype=np.uint8)
-    return True # cv2.copyMakeBorder(cropAnnotImg, 0, 0, 0, 0, cv2.BORDER_REPLICATE)
+    if maxIOU < 0.08:
+        return False
+    return True
 
 
 def decideSegType(maxIOU, sndMaxIOU, boxIOU):
