@@ -123,9 +123,11 @@ def main(config, title):
     if title is None:
         title = config_logging_title
 
-    log_dir = '../result/runs/{title}/{time}_{trial}/'.format(title=title, 
+    log_dir = '../result/runs/{title}/{name}/{time}_{trial}/'.format(title=title, 
+                                                            name=config["dataset"]["name"],
                                                            time=config_logging_start_time,
                                                            trial=config_logging_trial)
+
     writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
     
     # need better way

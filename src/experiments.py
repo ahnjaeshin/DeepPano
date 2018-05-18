@@ -79,15 +79,17 @@ def run(experiment, experimentNum):
     else:
         title = experiment.title
         config['logging']['title'] = title
+
+    dataset_name = config["dataset"]["name"]
     
-    log_dir = '../result/runs/{title}/{time}_{trial}/log.txt'.format(title=title, time=time, trial=experimentNum)
-    config_dir = '../result/runs/{title}/{time}_{trial}/config.json'.format(title=title, time=time, trial=experimentNum)
+    log_dir = '../result/runs/{title}/{name}/{time}_{trial}/log.txt'.format(title=title, name=dataset_name, time=time, trial=experimentNum)
+    config_dir = '../result/runs/{title}/{name}/{time}_{trial}/config.json'.format(title=title, name=dataset_name, time=time, trial=experimentNum)
 
     config['logging']['start_time'] = time
     config['logging']['logdir'] = log_dir
     config['logging']['trial'] = experimentNum
 
-    os.makedirs(os.path.dirname('../result/runs/{title}/{time}_{trial}/'.format(title=title, time=time, trial=experimentNum)), exist_ok=True)
+    os.makedirs(os.path.dirname('../result/runs/{title}/{name}/{time}_{trial}/'.format(title=title, name=dataset_name, time=time, trial=experimentNum)), exist_ok=True)
     with open(config_dir, 'w') as c:
         json.dump(config, c, sort_keys=True, indent=4)
     
