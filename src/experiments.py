@@ -137,7 +137,8 @@ def watch():
                         print("process with pid {} not found".format(pid))
                         continue
                     
-                    _, _, p = running[pid]
+                    _, log, p = running[pid]
+                    log.close()
                     p.kill()
                     print("process with pid {} deleted".format(pid))
                     continue

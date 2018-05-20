@@ -338,8 +338,8 @@ class Trainer():
 
             checkpoint = torch.load(path)
 
-            if checkpoint['model'] is not self.model.__class__.__name__:
-                raise Exception('model name does not match: checkpoint: {}, model: {}'.format(checkpoint['model'], self.model.__class__.__name__))
+            # if checkpoint['model'] is not self.model.__class__.__name__:
+            #     raise Exception('model name does not match: checkpoint: {}, model: {}'.format(checkpoint['model'], self.model.__class__.__name__))
 
             self.start_epoch = checkpoint['epoch']
             self.best_score = checkpoint['best_score']
