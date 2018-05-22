@@ -85,9 +85,10 @@ class UpBlock(nn.Module):
         return x
 
 class UNet(nn.Module):
-    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False, sigmoid=True):
         super(UNet, self).__init__()
         self.UNIT = unit
+        self.sigmoid = sigmoid
         self.in_conv = InBlock(channels, self.UNIT)
         self.down1 = DownBlock(self.UNIT, self.UNIT*2)
         self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
@@ -111,6 +112,64 @@ class UNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         x = self.out_conv(x)
-        x = F.sigmoid(x)
+        if self.sigmoid:
+            x = F.sigmoid(x)
+
+        return x
+
+
+class WNet(nn.Module):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False, sigmoid=True):
+        super(WNet, self).__init__()
+        self.UNIT = unit
+        self.sigmoid = sigmoid
+        self.in_conv = InBlock(channels, self.UNIT)
+        self.down1 = DownBlock(self.UNIT, self.UNIT*2)
+        self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3 = DownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4 = DownBlock(self.UNIT*8, self.UNIT*8)
+        self.up1 = UpBlock(self.UNIT*8, self.UNIT*8, self.UNIT*4, bilinear)
+        self.up2 = UpBlock(self.UNIT*4, self.UNIT*4, self.UNIT*2, bilinear)
+        self.up3 = UpBlock(self.UNIT*2, self.UNIT*2, self.UNIT, bilinear)
+        self.up4 = UpBlock(self.UNIT, self.UNIT, self.UNIT, bilinear)
+        self.out_conv = OutBlock(self.UNIT, classes)
+        self.dropout1 = nn.Dropout()
+
+        self.in_conv2 = InBlock(channels + classes, self.UNIT)
+        self.down1_1 = DownBlock(self.UNIT, self.UNIT*2)
+        self.down2_1 = DownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3_1 = DownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4_1 = DownBlock(self.UNIT*8, self.UNIT*8)
+        self.up1_1 = UpBlock(self.UNIT*8, self.UNIT*8, self.UNIT*4, bilinear)
+        self.up2_1 = UpBlock(self.UNIT*4, self.UNIT*4, self.UNIT*2, bilinear)
+        self.up3_1 = UpBlock(self.UNIT*2, self.UNIT*2, self.UNIT, bilinear)
+        self.up4_1 = UpBlock(self.UNIT, self.UNIT, self.UNIT, bilinear)
+        self.out_conv2 = OutBlock(self.UNIT, classes)
+
+    def forward(self, input):
+        x1 = self.in_conv(input)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.out_conv(x)
+
+        x = torch.cat([x, input], dim=1)
+        x1 = self.in_conv2(x)
+        x2 = self.down1_1(x1)
+        x3 = self.down2_1(x2)
+        x4 = self.down3_1(x3)
+        x5 = self.down4_1(x4)
+        x = self.up1_1(x5, x4)
+        x = self.up2_1(x, x3)
+        x = self.up3_1(x, x2)
+        x = self.up4_1(x, x1)
+        x = self.out_conv2(x)
+        if self.sigmoid:
+            x = F.sigmoid(x)
 
         return x

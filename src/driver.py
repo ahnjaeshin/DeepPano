@@ -174,8 +174,11 @@ def main(config, title):
     #      model     #
     ##################
     config_model = config["model"]
+    config_model_type = config_model["type"]
 
-    model = unet.UNet(2, 2, **config_model["param"])
+    MODEL = {'UNET': unet.UNet, 'WNet': unet.WNet}[config_model_type]
+
+    model = MODEL(2, 2, **config_model["param"])
     dummy_input = torch.rand(2, 2, *config_augmentation['size'])
     writers['train'].add_graph(model, (dummy_input, ))
     # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)

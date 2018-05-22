@@ -258,14 +258,15 @@ class Trainer():
             write_scalar_log('arithmetic/{}'.format(metric.__repr__()), arith_score.avg, epoch, log, writer)
             write_scalar_log('geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
             
-        writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('major/output', make_grid(output_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-        writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+        if do_log:
+            writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('major/output', make_grid(output_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
 
-        writer.add_image('confusion', confusion(output_image.images, target_image.images), epoch)
+            writer.add_image('confusion', confusion(output_image.images, target_image.images), epoch)
 
         writer.add_pr_curve('both', both_result.targets, both_result.outputs, epoch)
         writer.add_pr_curve('major', major_result.targets, major_result.outputs, epoch)
