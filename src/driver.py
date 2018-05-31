@@ -176,7 +176,13 @@ def main(config, title):
     config_model = config["model"]
     config_model_type = config_model["type"]
 
-    MODEL = {'UNET': unet.UNet, 'WNet': unet.WNet}[config_model_type]
+    MODEL = {
+        'UNET': unet.UNet, 'WNet': unet.WNet,
+        'FCDenseNetSmall': tiramisu.FCDenseNetSmall,
+        'FCDenseNet57': tiramisu.FCDenseNet57,
+        'FCDenseNet67': tiramisu.FCDenseNet67,
+        'FCDenseNet103': tiramisu.FCDenseNet103,
+    }[config_model_type]
 
     model = MODEL(2, 2, **config_model["param"])
     dummy_input = torch.rand(2, 2, *config_augmentation['size'])
