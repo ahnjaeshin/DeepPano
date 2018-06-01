@@ -153,52 +153,55 @@ class RandomAug:
             # image. Don't execute all of them, as that would often be way too
             # strong.
             #
-            iaa.SomeOf((0, 5), 
-            [
-                ##########################
-                # 1.     BLUR            #
-                ##########################
-                # Blur each image with varying strength using
-                # gaussian blur (sigma between 0 and 3.0),
-                # average/uniform blur (kernel size between 2x2 and 7x7)
-                # median blur (kernel size between 3x3 and 11x11).
-                iaa.OneOf([
-                    iaa.GaussianBlur((0, 5.0)),
-                    iaa.AverageBlur(k=(2, 9)),
-                ]),
+            iaa.Sometimes(0.5, [
+                iaa.SomeOf((0, 3),
+                [
+                    ##########################
+                    # 1.     BLUR            #
+                    ##########################
+                    # Blur each image with varying strength using
+                    # gaussian blur (sigma between 0 and 3.0),
+                    # average/uniform blur (kernel size between 2x2 and 7x7)
+                    # median blur (kernel size between 3x3 and 11x11).
+                    iaa.OneOf([
+                        iaa.GaussianBlur((0, 5.0)),
+                        iaa.AverageBlur(k=(2, 9)),
+                    ]),
 
-                ##########################
-                # 2~3    emboss, sharpen #
-                ##########################
-                # Sharpen each image, overlay the result with the original
-                # image using an alpha between 0 (no sharpening) and 1
-                # (full sharpening effect).
-                # iaa.Sharpen(alpha=(0, 1.0), lightness=(0.75, 1.5)),
-                # Same as sharpen, but for an embossing effect.
-                iaa.Emboss(alpha=(0, 1.0), strength=(0, 2.0)),
+                    ##########################
+                    # 2~3    emboss, sharpen #
+                    ##########################
+                    # Sharpen each image, overlay the result with the original
+                    # image using an alpha between 0 (no sharpening) and 1
+                    # (full sharpening effect).
+                    # iaa.Sharpen(alpha=(0, 1.0), lightness=(0.75, 1.5)),
+                    # Same as sharpen, but for an embossing effect.
+                    iaa.Emboss(alpha=(0, 1.0), strength=(0, 2.0)),
 
-                ##########################
-                # 4    dropout           #
-                ##########################
-                iaa.Dropout((0.01, 0.1)),
+                    ##########################
+                    # 4    dropout           #
+                    ##########################
+                    iaa.Dropout((0.01, 0.1)),
 
-                ##########################
-                # 5~7 light                #
-                ##########################
-                # Add a value of -10 to 10 to each pixel.
-                iaa.Add((-10, 10)),
-                # # Change brightness of images (50-150% of original value).
-                iaa.Multiply((0.5, 1.5)),
-                # Improve or worsen the contrast of images.
-                iaa.ContrastNormalization((0.5, 2.0)),
+                    ##########################
+                    # 5~7 light                #
+                    ##########################
+                    # Add a value of -10 to 10 to each pixel.
+                    # iaa.Add((-10, 10)),
+                    # # # Change brightness of images (50-150% of original value).
+                    # iaa.Multiply((0.5, 1.5)),
+                    # Improve or worsen the contrast of images.
+                    iaa.ContrastNormalization((0.5, 2.0)),
 
-                ##########################
-                # 8    salt & pepper     #
-                ##########################
-                iaa.SaltAndPepper(p=0.3),
+                    ##########################
+                    # 8    salt & pepper     #
+                    ##########################
+                    iaa.SaltAndPepper(p=0.3),
 
-            ]
-            ),
+                ], random_order=True
+                ),
+            ])
+            
         ])
 
     def __call__(self, img):
