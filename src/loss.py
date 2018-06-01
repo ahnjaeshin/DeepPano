@@ -9,13 +9,15 @@ class IOULoss(_WeightedLoss):
     """
 
     def __init__(self, weight=None, size_average=True, reduce=True):
+        weight = torch.tensor(weight).float()
         super(IOULoss, self).__init__(weight, size_average, reduce)
 
     def __call__(self, output, target):
-        batch_size = output.size()[0]
+        batch_size = output.size(0)
+        channel = output.size(1)
 
-        output = output.view(batch_size, -1)
-        target = (target == 1).float().view(batch_size, -1)
+        output = output.view(batch_size, channel, -1)
+        target = (target == 1).float().view(batch_size, channel, -1)
 
         assert output.size() == target.size()
         assert (output <= 1).all() and (output >= 0).all()
@@ -36,7 +38,7 @@ class IOULoss(_WeightedLoss):
             loss = loss * self.weight
 
         if not self.reduce:
-            return loss
+            return loss.mean(dim=-1)
         elif self.size_average:
             return loss.mean()
         else:
@@ -47,13 +49,16 @@ class DICELoss(_WeightedLoss):
     """
 
     def __init__(self, weight=None, size_average=True, reduce=True):
+        if weight is not None:
+            weight = torch.tensor(weight).float()
         super(DICELoss, self).__init__(weight, size_average, reduce)
 
     def __call__(self, output, target, reduce=True):
-        batch_size = output.size()[0]
+        batch_size = output.size(0)
+        channel = output.size(1)
 
-        output = output.view(batch_size, -1)
-        target = (target == 1).float().view(batch_size, -1)
+        output = output.view(batch_size, channel, -1)
+        target = (target == 1).float().view(batch_size, channel, -1)
 
         assert output.size() == target.size()
         assert (output <= 1).all() and (output >= 0).all()
@@ -72,9 +77,9 @@ class DICELoss(_WeightedLoss):
 
         if self.weight is not None:
             loss = loss * self.weight
-
+    
         if not self.reduce:
-            return loss
+            return loss.mean(dim=-1)
         elif self.size_average:
             return loss.mean()
         else:
