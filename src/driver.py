@@ -14,7 +14,7 @@ import torch.nn as nn
 import signal
 from tensorboardX import SummaryWriter
 import traceback
-
+import datetime
 import loss
 import metric
 from dataset import PanoSet, PretrainPanoSet
@@ -26,6 +26,8 @@ from utils import count_parameters, slack_message, model_summary
 import torch.multiprocessing as mp
 from typing import NamedTuple
 import pandas as pd
+
+import imgaug as ia
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
@@ -62,6 +64,8 @@ def getAugmentation(augments, param):
             "VFlip": transforms.RandomVerticalFlip,
             "Rotate": transforms.RandomRotation,
             "Crop": transforms.RandomCrop,
+            "Cutout": AUG.Cutout,
+            "Random": AUG.RandomAug
         }
 
         categories = {
@@ -70,6 +74,7 @@ def getAugmentation(augments, param):
             "Target": AUG.TargetOnly,
             "Pano": AUG.PanoOnly,
             "Box": AUG.BoxOnly,
+            "PanoTarget": AUG.PanoTarget,
         }
 
         aug_func = types[type]() if param is None else types[type](**param)
@@ -113,6 +118,7 @@ def main(config, title):
         seed = 0
         random.seed(seed) # augmentation
         np.random.seed(seed) # numpy
+        ia.seed(seed) #  imgaug library
         torch.manual_seed(seed) # cpu
         torch.cuda.manual_seed(seed) # gpu
         torch.cuda.manual_seed_all(seed) # multi gpu
@@ -121,6 +127,9 @@ def main(config, title):
 
     if title is None:
         title = config_logging_title
+
+    if config_logging_start_time == '':
+        config_logging_start_time = datetime.datetime.now().strftime("%b%d_%H-%M-%S")
 
     log_dir = '../result/runs/{title}/{name}/{time}_{trial}/'.format(title=title, 
                                                             name=config["dataset"]["name"],

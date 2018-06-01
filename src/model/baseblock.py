@@ -6,10 +6,10 @@ class DenseLayer(nn.Sequential):
     def __init__(self, in_channels, growth_rate):
         super().__init__()
         self.add_module('norm', nn.BatchNorm2d(in_channels))
-        self.add_module('relu', nn.ReLU(True))
+        self.add_module('relu', nn.LeakyReLU(True))
         self.add_module('conv', nn.Conv2d(in_channels, growth_rate, kernel_size=3,
                                           stride=1, padding=1, bias=True))
-        self.add_module('drop', nn.Dropout2d(0.2))
+        # self.add_module('drop', nn.Dropout2d(0.2))
 
     def forward(self, x):
         return super().forward(x)
@@ -44,11 +44,11 @@ class TransitionDown(nn.Sequential):
     def __init__(self, in_channels):
         super().__init__()
         self.add_module('norm', nn.BatchNorm2d(num_features=in_channels))
-        self.add_module('relu', nn.ReLU(inplace=True))
+        self.add_module('relu', nn.LeakyReLU(inplace=True))
         self.add_module('conv', nn.Conv2d(in_channels, in_channels,
                                           kernel_size=1, stride=1,
                                           padding=0, bias=True))
-        self.add_module('drop', nn.Dropout2d(0.2))
+        # self.add_module('drop', nn.Dropout2d(0.2))
         self.add_module('maxpool', nn.MaxPool2d(2))
 
     def forward(self, x):
