@@ -29,6 +29,8 @@ import pandas as pd
 
 import imgaug as ia
 
+from inference import Inference
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
 parser.add_argument("--title", "-t", type=str, help="title of experiment")
@@ -276,7 +278,20 @@ def main(config, title):
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
 
+    infer = Inference(
+        model=model,
+        datasets=datasets,
+        criterion=criterion,
+        LOG=LOG,
+        metrics=metrics,
+        path=log_dir,
+        visualizations=None,
+        writers=writers,
+    )
 
+    infer(
+        
+    )
 
     writers['train'].close()
     writers['val'].close()

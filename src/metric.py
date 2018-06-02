@@ -112,9 +112,9 @@ class Accuracy(ClassificationMetric):
     
     def eval(self, output, target):
         # (batch size) => each element is 0, 1, 2
-        length = output.shape
+        length = output.shape[0]
 
-        return ((output == target).sum() / length)[0]
+        return ((output == target).sum() / length)
 
     def __repr__(self):
         return 'accuracy' + super(Accuracy, self).__repr__()

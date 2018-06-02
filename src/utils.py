@@ -64,7 +64,7 @@ class GeometricMeter():
 
 class ImageMeter():
     
-    def __init__(self, limit=20):
+    def __init__(self):
         """images = 4d tensor of images
         
         Keyword Arguments:
@@ -72,26 +72,19 @@ class ImageMeter():
         """
 
         self.images = None
-        self.limit = limit
         self.count = 0
 
     def update(self, image):
-        if self.count >= self.limit:
-            return
-        
-        n = image.size(0)
-        if self.count + n > self.limit:
-            image = image.narrow(0, 0, self.limit - self.count)
-        
-        self.count += image.size(0)
-        assert (self.count <= self.limit)
-
         if self.images is None:
             self.images = image
-            return
-
+    
         self.images = torch.cat([self.images, image], dim=0)
         
+    def getImages(self, k=32):
+        if self.count < k:
+            return self.images
+        else:
+            return self.images.narrow(0, 0, k)
 
 class ClassMeter():
     

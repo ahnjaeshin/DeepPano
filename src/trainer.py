@@ -201,14 +201,14 @@ class Trainer():
         major_result = ClassMeter()
         minor_result = ClassMeter()
 
-        input_image = ImageMeter(16)
-        output_image = ImageMeter(16)
-        target_image = ImageMeter(16)
+        input_image = ImageMeter()
+        output_image = ImageMeter()
+        target_image = ImageMeter()
 
         confusion = ConfusionMatrix(threshold=0.5)
 
         start = time.time()
-        for input, target, index in dataloader:
+        for input, target, _ in dataloader:
             data_times.update(time.time() - start)
             batch_size = input.size(0)
 
@@ -259,20 +259,31 @@ class Trainer():
             write_scalar_log('geometric/{}'.format(metric.__repr__()), geo_score.avg, epoch, log, writer)
             
         if do_log:
-            writer.add_image('input/box', make_grid(input_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-            writer.add_image('input/pano', make_grid(input_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-            writer.add_image('major/output', make_grid(output_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-            writer.add_image('major/target', make_grid(target_image.images.narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
-            writer.add_image('minor/output', make_grid(output_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
-            writer.add_image('minor/target', make_grid(target_image.images.narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('input/box', make_grid(input_image.getImages().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('input/pano', make_grid(input_image.getImages().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('major/output', make_grid(output_image.getImages().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('major/target', make_grid(target_image.getImages().narrow(1, 0, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('minor/output', make_grid(output_image.getImages().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
+            writer.add_image('minor/target', make_grid(target_image.getImages().narrow(1, 1, 1), normalize=True, scale_each=True), epoch)
 
             writer.add_image('confusion', confusion(output_image.images, target_image.images), epoch)
 
-        writer.add_pr_curve('both', both_result.targets, both_result.outputs, epoch)
-        writer.add_pr_curve('major', major_result.targets, major_result.outputs, epoch)
-        writer.add_pr_curve('minor', minor_result.targets, minor_result.outputs, epoch)
+        writer.add_pr_curve('both/seg', both_result.targets, both_result.outputs, epoch)
+        writer.add_pr_curve('major/seg', major_result.targets, major_result.outputs, epoch)
+        writer.add_pr_curve('minor/seg', minor_result.targets, minor_result.outputs, epoch)
+        
+        self.write_class_pr(writer, output_image.images.narrow(1, 0, 1), target_image.images.narrow(1, 0, 1), 'major/class', epoch)
+        self.write_class_pr(writer, output_image.images.narrow(1, 1, 1), target_image.images.narrow(1, 1, 1), 'minor/class', epoch)
 
         return log, curr_scores.avg
+
+    def write_class_pr(self, writer, output, target, name, epoch):
+        batch_size = output.size(0)
+        channel = output.size(1)
+        assert channel == 1
+        output = output.view(batch_size, -1).mean(dim=1)
+        target = target.view(batch_size, -1).mean(dim=1)
+        writer.add_pr_curve(name, target, output, epoch)
 
     def batch_once(self, input, target, train):
         assert set(np.unique(target[0])).issubset({0,1})
