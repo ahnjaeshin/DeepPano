@@ -90,9 +90,9 @@ def plot_histogram(values, title, path):
 class Inference():
     
     def __init__(self, model, datasets, criterion, metrics, visualizations, LOG, writers, path):
-        self.model = model
+        self.model = model.cpu()
         self.datasets = datasets
-        self.criterion = criterion
+        self.criterion = criterion.cpu()
         self.LOG = LOG
         self.metrics = metrics
         self.visualizations = visualizations
