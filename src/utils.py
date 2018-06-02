@@ -79,7 +79,7 @@ class ImageMeter():
         self.images = torch.cat([self.images, image], dim=0)
         
     def getImages(self, k=32):
-        if self.image.size(0) < k:
+        if self.images.size(0) < k:
             return self.images
         else:
             return self.images.narrow(0, 0, k)
