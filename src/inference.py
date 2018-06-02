@@ -1,6 +1,7 @@
 
 import os
 import torch
+import matplotlib
 from torch.utils.data import DataLoader
 import datetime
 import time
@@ -11,6 +12,7 @@ import seaborn as sns
 import itertools
 
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 import pandas as pd
 
 def plot_confusion_matrix(output, target, threshold, title, path):
