@@ -185,9 +185,9 @@ class WNet(nn.Module):
         return x
 
 class RecurNet(nn.Module):
-    def __init__(self, unit=4, loop=4):
+    def __init__(self, channels, classes, unit=4, loop=4):
         super(RecurNet, self).__init__()
-        self.base = UNet(3, 2, False, unit, sigmoid=False)
+        self.base = UNet(channels+1, classes, False, unit, sigmoid=False)
         self.loop = loop
         self.outblock = conv_1(2 * self.loop, 2)
 
