@@ -1,17 +1,19 @@
 {
     "logging": {
         "logdir": true,
-        "title": "test",
+        "title": "tiramisu2",
         "start_time": "",
         "description": "for validation",
-        "trial": 3,
+        "trial": 4,
         "reproducible": true
     },
 
     "augmentation": {
         "size": [64, 32],
         "train": [],
-        "val": []
+        "val": [
+
+        ]
     },
 
     "dataset": {
@@ -25,27 +27,23 @@
     },
 
     "model": {
-        "type": "UNET",
+        "type": "RecurNet",
         "param": {
-            "bilinear": false,
-            "unit": 10
+
         }
     },
 
     "evaluation": {
         "loss": {
             "type": "DICE",
-            "param": {}
+            "param": {
+            }
         },
 
         "metrics": [
-            { "type": "IOU", "param": {"threshold": 0.5, "mode": "both"} },
-            { "type": "IOU", "param": {"threshold": 0.5, "mode": "major"} },
-            { "type": "IOU", "param": {"threshold": 0.5, "mode": "minor"} },
             { "type": "DICE", "param": {"threshold": 0.5, "mode": "both"} },
             { "type": "DICE", "param": {"threshold": 0.5, "mode": "major"} },
             { "type": "DICE", "param": {"threshold": 0.5, "mode": "minor"} },
-            { "type": "DICE", "param": {"threshold": 0.8, "mode": "both"} },
             { "type": "accuracy", "param": {"threshold": 0.5, "mode": "both"} },
             { "type": "f1", "param": {"threshold": 0.5, "mode": "major"} },
             { "type": "f1", "param": {"threshold": 0.5, "mode": "minor"} }
@@ -74,9 +72,9 @@
     },
 
     "training": {
-        "epochs": 200,
+        "epochs": 300,
         "batch_size": 10,
         "num_workers": 16,
-        "log_freq": 10
+        "log_freq": 20
     }
 }

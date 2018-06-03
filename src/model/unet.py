@@ -3,7 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def conv_3(in_channel, out_channel):
-    return nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1)
+    # return nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1)
+    return SepConv_3(in_channel, out_channel)
+
+class SepConv_3(nn.Sequential):
+    def __init__(self, in_channel, out_channel):
+        super().__init__()
+        self.add_module('conv_1', nn.Conv2d(in_channel, out_channel, kernel_size=1, bias=False))
+        self.add_module('conv_3', nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1, groups=out_channel, bias=False))
+
+    def forward(self, x):
+        return super().forward(x)
 
 def conv_1(in_channel, out_channel):
     return nn.Conv2d(in_channel, out_channel, kernel_size=1)
@@ -173,3 +183,26 @@ class WNet(nn.Module):
             x = F.sigmoid(x)
 
         return x
+
+class RecurNet(nn.Module):
+    def __init__(self, unit=4, loop=4):
+        super(RecurNet, self).__init__()
+        self.base = UNet(3, 2, False, unit, sigmoid=False)
+        self.loop = loop
+        self.outblock = conv_1(2 * self.loop, 2)
+
+    def forward(self, x):
+        out = []
+        pano = x.narrow(1, 1, 1)
+        box = (x.narrow(1, 0, 1)).clone()
+        x = torch.cat([box, x], dim=1)
+
+        for i in range(self.loop):
+            x = self.base(x)
+            out.append(x)
+            x = torch.cat([x, pano], dim=1)
+           
+        out = torch.cat(out, dim=1)
+        out = self.outblock(out)
+        out = F.sigmoid(out)
+        return out
