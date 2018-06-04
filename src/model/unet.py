@@ -206,3 +206,28 @@ class RecurNet(nn.Module):
         out = self.outblock(out)
         out = F.sigmoid(out)
         return out
+
+class RecurNet2(nn.Module):
+    def __init__(self, channels, classes, unit=4, loop=4):
+        super(RecurNet2, self).__init__()
+        self.base = UNet(channels+1, classes, False, unit, sigmoid=False)
+        self.loop = loop
+        self.outblock = conv_1(2 * self.loop, 2)
+
+    def forward(self, x):
+        out = []
+        pano = x.narrow(1, 1, 1)
+        box = (x.narrow(1, 0, 1)).clone()
+        x = torch.cat([box, x], dim=1)
+
+        for i in range(self.loop):
+            x = self.base(x)
+            out.append(x)
+            x = torch.stack(out, dim=0)
+            x = torch.mean(x, dim=0)
+            x = torch.cat([x, pano], dim=1)
+           
+        out = torch.cat(out, dim=1)
+        out = self.outblock(out)
+        out = F.sigmoid(out)
+        return out

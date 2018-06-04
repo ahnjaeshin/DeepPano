@@ -194,6 +194,7 @@ def main(config, title):
         'FCDenseNet67': tiramisu.FCDenseNet67,
         'FCDenseNet103': tiramisu.FCDenseNet103,
         'RecurNet': unet.RecurNet,
+        'RecurNet2': unet.RecurNet2,
     }[config_model_type]
 
     model = MODEL(2, 2, **config_model["param"])
