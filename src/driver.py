@@ -200,12 +200,14 @@ def main(config, title):
     model = MODEL(2, 2, **config_model["param"])
     dummy_input = torch.rand(2, 2, *config_augmentation['size'])
     writers['train'].add_graph(model, (dummy_input, ))
-    # torch.onnx.export(model, dummy_input, "graph.proto", verbose=True)
-    # writers['train'].add_graph_onnx("graph.proto")
-    model_sum = model_summary(model, input_size=(2, 224, 224))
-    writers['train'].add_scalar('number of parameter', count_parameters(model))
+
+    model_sum, trainable_param = model_summary(model, input_size=(2, 224, 224))
+    writers['train'].add_scalar('number of parameter/ver1', count_parameters(model))
+    writers['train'].add_scalar('number of parameter/ver2', trainable_param)
     LOG('model', model.__repr__())
-    LOG('model summary', model_sum)
+    LOG('model summary', *model_sum)
+    print(model_sum)
+    print(model.__repr__())
 
     ##################
     #   evaluation   #

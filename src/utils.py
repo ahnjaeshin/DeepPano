@@ -160,9 +160,6 @@ def model_summary(model, input_size):
             not (module == model)):
             hooks.append(module.register_forward_hook(hook))
             
-    # if torch.cuda.is_available():
-    #     dtype = torch.cuda.FloatTensor
-    # else: #TODO : change to support cuda
     dtype = torch.FloatTensor
     
     # check if there are multiple inputs to the network
@@ -214,16 +211,37 @@ def model_summary(model, input_size):
     log.append('Trainable params: ' + str(trainable_params))
     log.append('Non-trainable params: ' + str(total_params - trainable_params))
     log.append('----------------------------------------------------------------')
-    return "```" + '\n'.join(log) + "```"
 
+    log = slack_message_chunker(log)
 
-def timer(func):
-    """decorator to time functions (for profiling)
+    return log, trainable_params
+
+def slack_message_chunker(log):
+    """divide list into list of logs (each log less than limi)
     
     Arguments:
-        func {function} -- function you want to time
+        message {list} -- [list of logs]
     """
-    pass
+
+    log_segment = []
+    block = ['```']
+    total = 0
+    SLACK_LIMIT = 7900 #8000
+    for line in log:
+        line_length = len(line)
+        if total + line_length >= SLACK_LIMIT:
+            block.append('```')
+            log_segment.append('\n'.join(block))
+            block = ['```', line]
+            total = 0
+        else:
+            block.append(line)
+            total = total + line_length
+    
+    block.append('```')
+    log_segment.append('\n'.join(block))
+    return log_segment
+
 
 class slack_message:
     """send slack message
@@ -244,11 +262,12 @@ class slack_message:
         if not channel:
             self.channel = 'C9ZKLPGBV' # channel id of #botlog channel
 
-    def __call__(self, header, *msg):
-        log = {}
-        log['title'] = header
-        log['text'] = '\n'.join(msg)
-        try:
-            self.slack.chat.post_message(self.channel, text=None, attachments=[log], as_user=False, username=self.host)
-        except Exception as e:
-            print("slack error occured: {}".format(e))
+    def __call__(self, header, *messages):
+        for msg in messages:
+            log = {}
+            log['title'] = header
+            log['text'] = msg
+            try:
+                self.slack.chat.post_message(self.channel, text=None, attachments=[log], as_user=False, username=self.host)
+            except Exception as e:
+                print("slack error occured: {}".format(e))
