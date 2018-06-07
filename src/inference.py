@@ -69,8 +69,8 @@ def plot_confusion_matrix(output, target, threshold, title, path):
     # ax.xaxis.tick_top()
     plt.xticks(range(width), ['none', 'single', 'double'])
     plt.yticks(range(height), ['none', 'single', 'double'])
-    plt.xlabel('output')
-    plt.ylabel('target')
+    plt.xlabel('target')
+    plt.ylabel('output')
     plt.title(title)
     plt.savefig(path, format='png')
     plt.clf()
@@ -142,6 +142,7 @@ class Inference():
 
                 data['inferenceTime'] = inferenceTime
 
+                self.save_sample(data, output, target, 0.8)
                 self.save_sample(data, output, target, 0.5)
                 self.save_sample(data, output, target, 0.3)
                 self.save_sample(data, output, target, 0.1)
