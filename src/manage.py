@@ -65,9 +65,9 @@ def generateDataset(marginType, inputFileName):
 
     rowNum, colNum = inputDf.shape
     
-    if colNum != 5: # TODO: temporary
-        print('wrong number of columns')
-        return
+#    if colNum != 5: # TODO: temporary
+#        print('wrong number of columns')
+#        return
 
     # TODO: columns check?
 
@@ -104,18 +104,25 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
     outRows = []
 
     print('row: {}'.format(row))
-    imageTitle = row['Image.Title']
+    imageTitle = str(row['Image.Title'])
     panoFileName = row['Pano.File']
     xmlFileName = row['Xml.File']
     annotFileName = row['Annot.File']
 
     doAnnot = False if annotFileName == -1 else True
+    isAnnotDir = False
+    if doAnnot and not (annotFileName[-3] == 'psd'):
+        isAnnotDir = True
 
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
     imgShape = panoImg.shape
 
-    annotPsd = PSDImage.load(annotFileName) if doAnnot else None
-    annotImgs = extractImgsFromPsd(annotPsd, imgShape) # flipped
+    annotImgs = None
+    if doAnnot and not isAnnotDir:
+        annotPsd = PSDImage.load(annotFileName)
+        annotImgs = extractImgsFromPsd(annotPsd, imgShape) # flipped
+    elif isAnnotDir:
+        annotImgs = extractImgsFromDir(annotFileName, imgShape)
 
     # XML Parsing
     root = et.parse(xmlFileName).getroot()
@@ -131,7 +138,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
         leftMostCoor, cropPanoImg = cropImageWithMargin(cropPanoImg, coords, marginType, imgShape)
         cropPanoImg = cv2.flip(cropPanoImg, 0) # unflip
 
-        print('img size: {}'.format(cropPanoImg.shape))
+        print('img size: {} for coords: {}'.format(cropPanoImg.shape, coords))
 
         boxImg = np.zeros(imgShape, dtype=np.uint8)
         boxImg = genBoxImage(boxImg, coords) # flipped
@@ -234,12 +241,28 @@ def extractImgsFromPsd(annotPsd, imgShape):
     return annotImgs
 
 
+# This function returns flipped imgs
+def extractImgsFromDir(annotDir, imgShape):
+
+    annotImgs = {}
+
+    for subdir, dirs, files in os.walk(annotDir):
+        for fileName in files:
+            print(fileName)
+            annotImg = cv2.flip(cv2.imread(annotDir + fileName, cv2.IMREAD_GRAYSCALE), 0)
+            name = re.sub('Target-(\d+).jpg', '\\1', fileName)
+            annotImgs[name] = annotImg
+
+    return annotImgs
+
+
 def genBoxImage(img, coords):
 
     x1, y1, x2, y2 = 5000, 5000, 0, 0
 
-    for i in range(4):
-        cv2.line(img, coords[i], coords[(i+1)%4], 255, 1)
+    for i in range(len(coords)):
+        cv2.fillPoly(img, [np.array([coords[i], coords[(i+1)%len(coords)], coords[(i+2)%len(coords)]])], 255)
+        #cv2.line(img, coords[i], coords[(i+1)%4], 255, 1)
         x, y = coords[i]
         if x < x1:
             x1 = x
@@ -249,11 +272,11 @@ def genBoxImage(img, coords):
             x2 = x
         if y > y2:
             y2 = y
-    
-    h, w = img.shape[:2]
-    mask = np.zeros((h+2, w+2), dtype=np.uint8)
+
+    #h, w = img.shape[:2]
+    #mask = np.zeros((h+2, w+2), dtype=np.uint8)
     print('x1: {}, y1: {}, x2: {}, y2: {}'.format(x1, y1, x2, y2))
-    cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
+    #cv2.floodFill(img, mask, (int((x1+x2)/2), int((y1+y2)/2)), 255)
     
     return img
 
@@ -328,7 +351,11 @@ def decideSegType(maxIOU, sndMaxIOU, boxIOU):
 
 
 def genCoordsFromTooth(tooth):
-    return [(int(coord.attrib['X']), int(coord.attrib['Y'])) for coord in tooth]
+    coords = []
+    for coord in tooth:
+        coords.append([int(coord.attrib['X']), int(coord.attrib['Y'])])
+    return coords
+    # return [[int(coord.attrib['X']), int(coord.attrib['Y'])]] for coord in tooth]
 
 
 def cropImageWithMargin(img, coords, marginType, imgShape):
