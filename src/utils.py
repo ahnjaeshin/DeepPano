@@ -255,7 +255,7 @@ def slack_message(msg, header, slack, channel, host):
 
 class Logger:
     
-    def __init__(self, title, log=False, channel=None, time=None, trial=None):
+    def __init__(self, title, log=False, channel=None, time=None, trial=None, logdir):
         slack_token = os.environ["SLACK_API_TOKEN"]
         self.slack = Slacker(slack_token)
         self.host = '{host}_{name}@bot'.format(host=socket.gethostname(), name=title)
