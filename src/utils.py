@@ -294,6 +294,7 @@ class Logger:
             raise NotImplementedError
 
     def add_model(self, title, model, input_size):
+        model = model.cpu()
         dummy_input = torch.rand(1, *input_size)
         self.writers['train'].add_graph(model, (dummy_input, ))
         model_sum, trainable_param = model_summary(model, input_size=input_size)
