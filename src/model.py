@@ -160,7 +160,7 @@ class VanillaModel():
             LOG('tensorboard', type='histogram', turn='train', 
                 name=tag, epoch=epoch, values=value.data.cpu().numpy())
             LOG('tensorboard', type='histogram', turn='train', 
-                name=tag, epoch=epoch, values=value.grad.cpu().numpy())
+                name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
         
         self.scheduler.step()
 

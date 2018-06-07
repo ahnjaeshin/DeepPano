@@ -7,21 +7,13 @@ Things to log
 2. forward propagation, backward propagation
 """
 
-import collections
 import datetime
 import time
-import os
 
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
 
 from torch.utils.data import DataLoader
-
 from utils import AverageMeter, GeometricMeter, ImageMeter, ClassMeter
-import shutil
-
 from visualization import ConfusionMatrix
 
 class Pipeline:
@@ -38,15 +30,7 @@ class Trainer():
     """trainer class
     1. able to train, test models
     2. able to search for hyper paramters
-        
-        Arguments:
-            model {[type]} -- [description]
-            criterion {[type]} -- [description]
-            optimizer {[type]} -- [description]
-            datasets {[type]} -- [description]
-            metrics {[type]} -- [description]
-
-        ensemble!!
+    
     """
 
     def __init__(self, model, datasets, metrics, LOG):
@@ -85,7 +69,7 @@ class Trainer():
 
             if do_log:
                 self.model.checkpoint(epoch, self.LOG.log_dir_base+'checkpoint/')
-                self.LOG('epoch: {}/{}, elasped: {}, eta: {}'.format(epoch + 1, epochs, elasped_time, eta), *log)
+                self.LOG('slack', name='epoch: {}/{}'.format(epoch+1, epochs), values='elasped: {}, eta: {}'.format(elasped_time, eta))
 
         self.LOG('slack', name='train ended', values='')
 

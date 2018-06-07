@@ -174,15 +174,12 @@ def main(experiment, logging, augmentation, dataset, model, metric, training):
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
 
-    exit(0)
-
     infer = Inference(
-        model=model,
+        model=MODEL,
         datasets=datasets,
         LOG=LOG,
         metrics=metrics,
         visualizations=None,
-        writers=writers,
     )
 
     infer(

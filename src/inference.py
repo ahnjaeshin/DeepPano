@@ -91,21 +91,21 @@ def plot_histogram(values, title, path):
 
 class Inference():
     
-    def __init__(self, model, datasets, metrics, visualizations, LOG, writers, path):
-        self.model = model.cpu()
+    def __init__(self, model, datasets, metrics, visualizations, LOG):
+        self.model = model.module.cpu()
+        self.criterion = model.criterion.cpu()
         self.datasets = datasets
         self.LOG = LOG
+        self.path = LOG.log_dir_base
         self.metrics = metrics
         self.visualizations = visualizations
-        self.writers = writers
-        self.path = path
 
     def __call__(self, k=5):
         dataloaders = { x: DataLoader(dataset=self.datasets[x]) 
                 for x in ['train', 'val']}
 
-        for x in ['train', 'val']:
-            self.evaluate(k, x, dataloaders)
+        for turn in ['train', 'val']:
+            self.evaluate(k, turn, dataloaders)
 
     def evaluate(self, k, turn, dataloaders):
         losses = {}
@@ -151,24 +151,24 @@ class Inference():
                 samples.append(data)
 
         # histogram of losses
-        plot_histogram(list(losses.values()), 'loss', '{}/{}/loss.png'.format(self.path, turn))
+        plot_histogram(list(losses.values()), 'loss', '{}{}/loss.png'.format(self.path, turn))
         plt.close()
         # histogram of each metrics
         for metric, result in zip(self.metrics, metric_results):
             name = repr(metric).replace('/', '_')
-            plot_histogram(list(result.values()), name, '{}/{}/{}.png'.format(self.path, turn, name))
+            plot_histogram(list(result.values()), name, '{}{}/{}.png'.format(self.path, turn, name))
 
         plt.close()
         plot_confusion_matrix(output_image.images, target_image.images, 0.5, 'confusion_0.5', '{}/{}/{}.png'.format(self.path, turn, 'confusion_0.5'))
         plt.close()
         df = pd.DataFrame(samples)
-        df.to_csv('{}/{}/result.csv'.format(self.path, turn))
+        df.to_csv('{}{}/result.csv'.format(self.path, turn))
 
         COLUMNS = [repr(m).replace('/', '_') for m in self.metrics] + ['loss']
         fig = plt.figure()
         plt.clf()
         g = sns.pairplot(df, size=3, vars=COLUMNS)
-        g.savefig('{}/{}/metrc.png'.format(self.path, turn))
+        g.savefig('{}{}/metrc.png'.format(self.path, turn))
         plt.clf()
 
     def save_sample(self, data, output, target, threshold):
@@ -176,4 +176,4 @@ class Inference():
         assert output.size(0) == 1
         channel = output.size(1)
         data['output_{}'.format(threshold)] = (output.view(channel, -1) > threshold).byte().numpy().any(axis=1).sum(axis=0)
-        data['target+{}'.format(threshold)] = (target.view(channel, -1) > threshold).byte().numpy().any(axis=1).sum(axis=0)
+        data['target_{}'.format(threshold)] = (target.view(channel, -1) > threshold).byte().numpy().any(axis=1).sum(axis=0)
