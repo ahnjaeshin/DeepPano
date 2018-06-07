@@ -1,16 +1,19 @@
 {
-    "logging": {
-        "logdir": true,
-        "title": "tiramisu2",
-        "start_time": "",
-        "description": "for validation",
-        "trial": 4,
+    "experiment": {
         "reproducible": true
     },
 
+    "logging": {
+        "log": true,
+        "title": "none"
+    },
+
     "augmentation": {
+        "channel": 2,
         "size": [64, 32],
-        "train": [],
+        "train": [
+            { "category": "All", "type": "Crop", "param": {"size": [512, 256], "pad_if_needed": true} }
+        ],
         "val": [
 
         ]
@@ -27,52 +30,55 @@
     },
 
     "model": {
-        "type": "RecurNet",
+        "category": "Vanilla",
         "param": {
-
+            "module": {
+                "type": "RecurNet2",
+                "param": {
+                    "channels": 2,
+                    "classes": 2,
+                    "unit": 4
+                }
+            },
+            "weight_init": "he_uniform",
+            "optimizer": {
+                "type": "SGD",
+                "param": {
+                    "weight_decay": 1e-5,
+                    "lr": 0.1,
+                    "momentum": 0.9,
+                    "nesterov": true
+                }
+            },
+            "scheduler": {
+                "type": "Step",
+                "param": {
+                    "step_size": 50, 
+                    "gamma": 0.1
+                }
+            },
+            "loss": {
+                "type": "DICE",
+                "param": {
+                    
+                }
+            },
+            "ensemble": false
         }
     },
 
-    "evaluation": {
-        "loss": {
-            "type": "DICE",
-            "param": {
-            }
-        },
-
-        "metrics": [
-            { "type": "DICE", "param": {"threshold": 0.5, "mode": "both"} },
-            { "type": "DICE", "param": {"threshold": 0.5, "mode": "major"} },
-            { "type": "DICE", "param": {"threshold": 0.5, "mode": "minor"} },
-            { "type": "accuracy", "param": {"threshold": 0.5, "mode": "both"} },
-            { "type": "f1", "param": {"threshold": 0.5, "mode": "major"} },
-            { "type": "f1", "param": {"threshold": 0.5, "mode": "minor"} }
-        ]
-    },
-
-    "learning": {
-        "checkpoint": "",
-        "weight_init": "he_uniform",
-        "hard_example_mining": false,
-        "lr_schedule": {
-            "type": "Step",
-            "param": {
-                "step_size": 50, 
-                "gamma": 0.1
-            }
-        },
-        "optimizer": {
-            "type": "SGD",
-            "param": {
-                "weight_decay": 1e-5,
-                "lr": 1
-            }
-        },
-        "emsemble": false
-    },
+    "metric": [
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "both"} },
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "major"} },
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "minor"} },
+        { "type": "accuracy", "param": {"threshold": 0.5, "mode": "both"} },
+        { "type": "f1", "param": {"threshold": 0.5, "mode": "major"} },
+        { "type": "f1", "param": {"threshold": 0.5, "mode": "minor"} }
+    ],
 
     "training": {
-        "epochs": 300,
+        "checkpoint": "",
+        "epochs": 1,
         "batch_size": 10,
         "num_workers": 16,
         "log_freq": 20

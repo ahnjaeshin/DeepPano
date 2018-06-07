@@ -1,20 +1,20 @@
-import argparse
-import socket
-import os
 import datetime
-import time
 import logging
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
+import math
+import os
+import socket
+import time
 from collections import OrderedDict
 from functools import reduce
-import torch.nn.functional as F
 
-import math
 import numpy as np
-
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from slacker import Slacker
+from tensorboardX import SummaryWriter
+from torchvision.utils import make_grid
+
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -164,9 +164,9 @@ def model_summary(model, input_size):
     
     # check if there are multiple inputs to the network
     if isinstance(input_size[0], (list, tuple)):
-        x = [Variable(torch.rand(1,*in_size)).type(dtype) for in_size in input_size]
+        x = [torch.rand(1,*in_size).type(dtype) for in_size in input_size]
     else:
-        x = Variable(torch.rand(1,*input_size)).type(dtype)
+        x = torch.rand(1,*input_size).type(dtype)
         
     log = []
     max_depth = 0
@@ -226,7 +226,7 @@ def slack_message_chunker(log):
     log_segment = []
     block = ['```']
     total = 0
-    SLACK_LIMIT = 7900 #8000
+    SLACK_LIMIT = 7500 #8000
     for line in log:
         line_length = len(line)
         if total + line_length >= SLACK_LIMIT:
@@ -242,32 +242,87 @@ def slack_message_chunker(log):
     log_segment.append('\n'.join(block))
     return log_segment
 
+@broadcast
+def slack_message(msg, header, slack, channel, host):
+    log = {}
+    log['title'] = header
+    log['text'] = msg
+    try:
+        slack.chat.post_message(channel, text=None, attachments=[log], as_user=False, username=host)
+    except Exception as e:
+        print("slack error occured: {}".format(e))
 
-class slack_message:
-    """send slack message
-    
-    Arguments:
-        text {string} -- any string want to send
-    
-    Keyword Arguments:
-        channel {string} -- the name of channel to send to (default: channel #botlog)
-    """
 
-    def __init__(self, name, channel=None):
+class Logger:
+    
+    def __init__(self, title, log=False, channel=None, time=None, trial=None):
         slack_token = os.environ["SLACK_API_TOKEN"]
         self.slack = Slacker(slack_token)
-        self.host = socket.gethostname() + ' ' + name + '@bot'
+        self.host = '{host}_{name}@bot'.format(host=socket.gethostname(), name=title)
+        self.log = log
+        self.channel = channel if channel else 'C9ZKLPGBV' # channel id of #botlog channel
+        self.time = time if time else datetime.datetime.now().strftime("%b%d_%H-%M-%S")
+        self.trial = trial if trial else 0
 
-        self.channel = channel    
-        if not channel:
-            self.channel = 'C9ZKLPGBV' # channel id of #botlog channel
+        self.log_dir_base = '../result/runs/{title}/{time}_{trial}/'.format(title=title, time=time, trial=trial)
+        self.writers = {x : SummaryWriter(log_dir=self.log_dir_base + x) for x in ('train', 'val')}
 
-    def __call__(self, header, *messages):
-        for msg in messages:
-            log = {}
-            log['title'] = header
-            log['text'] = msg
-            try:
-                self.slack.chat.post_message(self.channel, text=None, attachments=[log], as_user=False, username=self.host)
-            except Exception as e:
-                print("slack error occured: {}".format(e))
+    def __call__(self, mode, **content):
+        lookup = {
+            'slack': self.send_slack_message,
+            'print': self.print_log,
+            'tensorboard': self.tensorboard,
+            'model': self.add_model,
+        }
+        lookup[mode](**content)
+
+    def print_log(self, name, values):
+        print('{name}: {val}'.format(name=name, val=values))
+
+    def tensorboard(self, type, turn, name, epoch, values):
+        assert turn in ('train', 'val')
+        if type == 'scalar':
+            self.writers[turn].add_scalar(name, values, epoch)
+        elif type == 'image':
+            self.writers[turn].add_image(name, make_grid(values, normalize=True, scale_each=True), epoch)
+        elif type == 'histogram':
+            self.writers[turn].add_histogram(name, values, epoch, bins='doane')
+        elif type == 'pr':
+            target, output = values
+            self.writers[turn].add_pr_curve(name, target, output, epoch)
+        else:
+            raise NotImplementedError
+
+    def add_model(self, title, model, input_size):
+        dummy_input = torch.rand(1, *input_size)
+        self.writers['train'].add_graph(model, (dummy_input, ))
+        model_sum, trainable_param = model_summary(model, input_size=input_size)
+        self.writers['train'].add_scalar('number of parameter/w_input', count_parameters(model))
+        self.writers['train'].add_scalar('number of parameter/wo_input', trainable_param)
+        self.send_slack_message(title, model_sum, merge=False)
+        self.print_log(title, '\n'.join(model_sum))
+        self.print_log(title, model.__repr__())
+
+    def send_slack_message(self, name, values, merge=True):
+        if type(values) is list or type(values) is tuple:
+            if merge:
+                values = '\n'.join(values)
+        slack_message(values, name, slack=self.slack, channel=self.channel, host=self.host)
+
+    def finish(self):
+        self.writers['train'].close()
+        self.writers['val'].close()
+
+class TypeParser:
+    
+    def __init__(self, types):
+        self.types = types
+
+    def __call__(self, type, param=None):
+        return self.lookup(type)() if param is None else self.lookup(type)(**param)
+
+    def lookup(self, type):
+        if type not in self.types:
+            print("types: {}".format(self.types))
+            raise NotImplementedError
+        return self.types[type]

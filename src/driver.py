@@ -1,29 +1,20 @@
-"""
-timer interrupt
-"""
-
 
 import argparse
-import datetime
 import json
-import socket
+
 import random
 import numpy as np
 import torch
 import torch.nn as nn
 import signal
-from tensorboardX import SummaryWriter
 import traceback
-import datetime
-import loss
-import metric
+import metric as M
 from dataset import PanoSet, PretrainPanoSet
-from model import *
+from model import getModel
 from torchvision import transforms
 from trainer import Trainer
 import augmentation as AUG
-from utils import count_parameters, slack_message, model_summary
-import torch.multiprocessing as mp
+from utils import Logger, TypeParser
 from typing import NamedTuple
 import pandas as pd
 
@@ -33,7 +24,6 @@ from inference import Inference
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--config", "-c", type=str, required=True, help="path to config file")
-parser.add_argument("--title", "-t", type=str, help="title of experiment")
 
 FRONT = (11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43)
 writers = {}
@@ -84,19 +74,6 @@ def getAugmentation(augments, param):
 
     return AUG.TripleAugment([lookupAugment(**a) for a in augments], **param)
 
-class TypeParser:
-    
-    def __init__(self, table):
-        self.table = table
-
-    def __call__(self, type, param=None):
-        return self.lookup(type)() if param is None else self.lookup(type)(**param)
-
-    def lookup(self, type):
-        if type not in self.table:
-            print("table: {}".format(self.table))
-            raise NotImplementedError
-        return self.table[type]
 
 class Data(NamedTuple):
     metadata_path: str
@@ -105,17 +82,9 @@ class Data(NamedTuple):
     box_mean: float
     box_std : float
 
-def main(config, title):
-    
-    ##################
-    #     logging    #
-    ##################
-    config_logging = config["logging"]
-    config_logging_start_time = config_logging["start_time"]
-    config_logging_title = config_logging["title"]
-    config_logging_trial = config_logging["trial"]
+def main(experiment, logging, augmentation, dataset, model, metric, training):
 
-    if config_logging["reproducible"]:
+    if experiment["reproducible"]:
         print('fix seed on')
         seed = 0
         random.seed(seed) # augmentation
@@ -127,31 +96,19 @@ def main(config, title):
         torch.backends.cudnn.enabled = False # cudnn library 
         torch.backends.cudnn.deterministic = True
 
-    if title is None:
-        title = config_logging_title
-
-    if config_logging_start_time == '':
-        config_logging_start_time = datetime.datetime.now().strftime("%b%d_%H-%M-%S")
-
-    log_dir = '../result/runs/{title}/{name}/{time}_{trial}/'.format(title=title, 
-                                                            name=config["dataset"]["name"],
-                                                           time=config_logging_start_time,
-                                                           trial=config_logging_trial)
-
-    writers = {x : SummaryWriter(log_dir=log_dir + x) for x in ('train', 'val')}
-    
-    # need better way
-    LOG = slack_message(title)
-    LOG('config', json.dumps(config))
+    ##################
+    #     logging    #
+    ##################
+    LOG = Logger(**logging)    
+    LOG('print', name='config', values=json.dumps(config))
     
     ##################
     #     dataset    #
     ##################
-    config_dataset = config["dataset"]
-    config_data_path = config_dataset["data-dir"]
-    config_data_name = config_dataset["name"]
-    config_dataset_filter = config_dataset["filter"]
-    config_dataset_pretrain = config_dataset["pretrain"]
+    config_data_path = dataset["data-dir"]
+    config_data_name = dataset["name"]
+    config_dataset_filter = dataset["filter"]
+    config_dataset_pretrain = dataset["pretrain"]
 
     df = pd.read_csv(config_data_path)
     data = df.loc[df['DataSet.Title'] == config_data_name].iloc[0]
@@ -162,133 +119,68 @@ def main(config, title):
     ##################
     #  augmentation  #
     ##################
-    config_augmentation = config["augmentation"]
+
     augmentation_param = {
-        'size': config_augmentation['size'],
+        'size': augmentation['size'],
         'box_mean': float(data.box_mean), 'pano_mean': float(data.pano_mean),
         'box_std': float(data.box_std), 'pano_std': float(data.pano_std),
     }
 
-    print(augmentation_param)
+    LOG('print', name='augmentation', values=augmentation_param)
+    LOG('slack', name='augmentation', values=augmentation_param)
 
     
-    dataset = PretrainPanoSet if config_dataset_pretrain else PanoSet
+    D = PretrainPanoSet if config_dataset_pretrain else PanoSet
 
-    augmentations = {x : getAugmentation(config_augmentation[x], augmentation_param) for x in ('train', 'val')}    
+    augmentations = {x : getAugmentation(augmentation[x], augmentation_param) for x in ('train', 'val')}    
 
-    datasets = { x: dataset(data.metadata_path, data_filter[x], transform=augmentations[x])
+    datasets = { x: D(data.metadata_path, data_filter[x], transform=augmentations[x])
                     for x in ('train', 'val')}
 
-    LOG('dataset', str(datasets['train']), str(datasets['val']))
+    LOG('slack', name='dataset', values=[str(datasets['train']), str(datasets['val'])])
 
     ##################
     #      model     #
     ##################
-    config_model = config["model"]
-    config_model_type = config_model["type"]
 
-    MODEL = {
-        'UNET': unet.UNet, 'WNet': unet.WNet,
-        'FCDenseNetSmall': tiramisu.FCDenseNetSmall,
-        'FCDenseNet57': tiramisu.FCDenseNet57,
-        'FCDenseNet67': tiramisu.FCDenseNet67,
-        'FCDenseNet103': tiramisu.FCDenseNet103,
-        'RecurNet': unet.RecurNet,
-        'RecurNet2': unet.RecurNet2,
-    }[config_model_type]
-
-    model = MODEL(2, 2, **config_model["param"])
-    dummy_input = torch.rand(2, 2, *config_augmentation['size'])
-    writers['train'].add_graph(model, (dummy_input, ))
-
-    model_sum, trainable_param = model_summary(model, input_size=(2, 224, 224))
-    writers['train'].add_scalar('number of parameter/ver1', count_parameters(model))
-    writers['train'].add_scalar('number of parameter/ver2', trainable_param)
-    LOG('model', model.__repr__())
-    LOG('model summary', *model_sum)
-    print(model_sum)
-    print(model.__repr__())
+    MODEL = getModel(**model)
+    input_size = [augmentation['channel']] + augmentation['size']
+    MODEL.modelSummary(input_size, LOG)
 
     ##################
-    #   evaluation   #
+    #   metric   #
     ##################
-    config_evaluation = config["evaluation"]
-    # IOU, DICE, F1
-    config_metrics = config_evaluation["metrics"]
-    # IOU, DICE
-    config_loss = config_evaluation["loss"]
 
-    metricParser = TypeParser(table = {
-        "IOU": metric.IOU, 
-        "DICE": metric.DICE,
-        "accuracy": metric.Accuracy,
-        "f1": metric.F1,
+    metricParser = TypeParser(types = {
+        "IOU": M.IOU, 
+        "DICE": M.DICE,
+        "accuracy": M.Accuracy,
+        "f1": M.F1,
     })
-    metrics = [metricParser(**m) for m in config_metrics]
-
-    lossParser = TypeParser(table = {
-        "IOU": loss.IOULoss,
-        "DICE": loss.DICELoss,
-        "CE": nn.CrossEntropyLoss,
-    })
-    criterion = lossParser(**config_loss)
-
-    ##################
-    #    learning    #
-    ##################
-    config_learning = config["learning"]
-    
-    # xavier_uniform, xavier_normal, he_uniform, he_normal
-    config_learning_weightinit = config_learning["weight_init"]
-    # give path to load checkpoint or null
-    config_learning_checkpoint = config_learning["checkpoint"]
-
-    # optimizer, default : 0.9, False, 1-e4
-    config_optimizer = config_learning["optimizer"]
-    config_optimizer["param"]["params"] = model.parameters()
-    optimParser = TypeParser(table = {
-        "SGD": torch.optim.SGD,
-        "ADAM": torch.optim.Adam,
-    })
-    optimizer = optimParser(**config_optimizer)
-
-    config_learning_scheduler = config_learning["lr_schedule"]
-    config_learning_scheduler["param"]["optimizer"] = optimizer
-    schedParser = TypeParser(table = {
-        "Step": torch.optim.lr_scheduler.StepLR,
-        "Plateau": torch.optim.lr_scheduler.ReduceLROnPlateau,
-    })
-    scheduler = schedParser(**config_learning_scheduler)
+    metrics = [metricParser(**m) for m in metric]
 
     ##################
     #    training    #
     ##################
-    trainer = Trainer(model=model, 
+    trainer = Trainer(model=MODEL, 
                         datasets=datasets, 
-                        criterion=criterion, 
-                        optimizer=optimizer, 
-                        scheduler=scheduler, 
                         metrics=metrics, 
-                        writers=writers,
-                        LOG=LOG,
-                        path=log_dir + 'train',
-                        checkpoint=config_learning_checkpoint,
-                        init=config_learning_weightinit)
+                        LOG=LOG)
 
     try: 
         trainer.train(**config["training"])
     except Exception as e:
-        LOG('warning', 'abrupt end, {}'.format(e))
+        LOG('slack', name='warning', values='abrupt end, {}'.format(e))
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
+
+    exit(0)
 
     infer = Inference(
         model=model,
         datasets=datasets,
-        criterion=criterion,
         LOG=LOG,
         metrics=metrics,
-        path=log_dir,
         visualizations=None,
         writers=writers,
     )
@@ -297,9 +189,9 @@ def main(config, title):
         
     )
 
-    writers['train'].close()
-    writers['val'].close()
+    LOG.finish()
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    main(json.load(open(args.config)), args.title)
+    config = json.load(open(args.config))
+    main(**config)

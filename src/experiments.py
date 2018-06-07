@@ -51,8 +51,6 @@ class Experiment():
     @staticmethod
     def makeExperiment(e):
         gpu, config, title = e.split('|')
-        if title == "None":
-            title = None
         if gpu != "None":
             gpu = gpu.split(',')
         return Experiment(gpu, config, title)
@@ -74,22 +72,17 @@ def run(experiment, experimentNum):
     config = json.load(open(experiment.config))
 
     time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-    if experiment.title is None:
-        title = config['logging']['title']
-    else:
-        title = experiment.title
-        config['logging']['title'] = title
-
-    dataset_name = config["dataset"]["name"]
+    config['logging']['title'] = experiment.title
+    title = experiment.title
     
-    log_dir = '../result/runs/{title}/{name}/{time}_{trial}/log.txt'.format(title=title, name=dataset_name, time=time, trial=experimentNum)
-    config_dir = '../result/runs/{title}/{name}/{time}_{trial}/config.json'.format(title=title, name=dataset_name, time=time, trial=experimentNum)
+    log_dir = '../result/runs/{title}/{time}_{trial}/log.txt'.format(title=title, time=time, trial=experimentNum)
+    config_dir = '../result/runs/{title}/{time}_{trial}/config.json'.format(title=title, time=time, trial=experimentNum)
 
     config['logging']['start_time'] = time
     config['logging']['logdir'] = log_dir
     config['logging']['trial'] = experimentNum
 
-    os.makedirs(os.path.dirname('../result/runs/{title}/{name}/{time}_{trial}/'.format(title=title, name=dataset_name, time=time, trial=experimentNum)), exist_ok=True)
+    os.makedirs(os.path.dirname('../result/runs/{title}/{time}_{trial}/'.format(title=title, time=time, trial=experimentNum)), exist_ok=True)
     with open(config_dir, 'w') as c:
         json.dump(config, c, sort_keys=True, indent=4)
     
@@ -109,7 +102,7 @@ def run(experiment, experimentNum):
         gpu_lock.release()
         env['CUDA_VISIBLE_DEVICES'] = ', '.join(experiment.gpu)
 
-    command = ['python3', 'driver.py', '--config', config_dir, '--title', title]
+    command = ['python3', 'driver.py', '--config', config_dir]
 
     logfile = open(log_dir, 'w')
     p = subprocess.Popen(command, env=env, universal_newlines=True, stdout=logfile)
@@ -152,6 +145,9 @@ def watch():
                 
 
 def add(args):
+    if args.title is None:
+        print("title cannot be empty")
+        return
     with open(JOBS, 'w', ) as fifo:
         fifo.write(str(Experiment(args.gpu, args.config, args.title)))
         print("Added new experiment")

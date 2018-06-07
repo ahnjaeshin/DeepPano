@@ -133,6 +133,9 @@ class PanoSet(Dataset):
         patch = self.data[index]
         return patch.all_image_path
 
+    def step(self):
+        pass
+
     def __len__(self):
         return len(self.data)
 
