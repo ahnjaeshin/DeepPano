@@ -47,6 +47,7 @@ class Trainer():
         
         if checkpoint:
             self.start_epoch = self.model.load(checkpoint)
+        self.model.gpu()
         self.epochs = epochs
         self.LOG('slack', name='train', values='train started: using {} gpus'.format(torch.cuda.device_count()))
 

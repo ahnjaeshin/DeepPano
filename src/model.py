@@ -104,16 +104,6 @@ class VanillaModel():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if torch.cuda.device_count() > 1:
-            self.module = torch.nn.DataParallel(self.module)
-
-        if torch.cuda.is_available():
-            self.module = self.module.to(self.device)
-            self.criterion = self.criterion.to(self.device)
-            torch.backends.cudnn.benchmark = True
-        else:
-            print("CUDA is unavailable")
-
     def __call__(self, input, target, turn):
         assert set(np.unique(target[0])).issubset({0,1})
         input, target = cuda(input, self.device), cuda(target, self.device, True)
@@ -126,7 +116,6 @@ class VanillaModel():
         return loss.cpu().item(), cpu(output)
 
 
-        
     def train(self, input, target):
         
         self.module.train()
@@ -169,6 +158,17 @@ class VanillaModel():
 
     def getLog(self):
         pass
+
+    def gpu(self):
+        if torch.cuda.device_count() > 1:
+            self.module = torch.nn.DataParallel(self.module)
+
+        if torch.cuda.is_available():
+            self.module = self.module.to(self.device)
+            self.criterion = self.criterion.to(self.device)
+            torch.backends.cudnn.benchmark = True
+        else:
+            print("CUDA is unavailable")
 
     def checkpoint(self, epoch, path):
 
