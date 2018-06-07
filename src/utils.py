@@ -255,7 +255,7 @@ def slack_message(msg, header, slack, channel, host):
 
 class Logger:
     
-    def __init__(self, title, log=False, channel=None, time=None, trial=None, logdir=None):
+    def __init__(self, title, log=False, channel=None, start_time=None, trial=None, logdir=None):
         slack_token = os.environ["SLACK_API_TOKEN"]
         self.slack = Slacker(slack_token)
         self.host = '{host}_{name}@bot'.format(host=socket.gethostname(), name=title)
@@ -264,7 +264,7 @@ class Logger:
         self.time = time if time else datetime.datetime.now().strftime("%b%d_%H-%M-%S")
         self.trial = trial if trial else 0
 
-        self.log_dir_base = '../result/runs/{title}/{time}_{trial}/'.format(title=title, time=time, trial=trial)
+        self.log_dir_base = '../result/runs/{title}/{time}_{trial}/'.format(title=title, time=start_time, trial=trial)
         self.writers = {x : SummaryWriter(log_dir=self.log_dir_base + x) for x in ('train', 'val')}
 
     def __call__(self, mode, **content):
