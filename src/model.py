@@ -6,6 +6,7 @@ import torch.nn.init as init
 import loss
 import os
 import numpy as np
+import torch.nn.functional as F
 
 def cuda(x, device, async=False):
     """for use in gpu
@@ -93,14 +94,27 @@ class VanillaModel():
     
     def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
         
-        self.module = getModule(**module)
-        self.optimizer = getOptimizer(**optimizer, module_params=self.module.parameters())
-        self.scheduler = getScheduler(**scheduler, optimizer=self.optimizer)
-        self.criterion = getLoss(**loss)
         self.ensemble = ensemble
 
-        if init:
-            self.module.apply(Init(init))
+        if self.ensemble:
+            module_params = []
+            self.module = []
+            for i in range(3):
+                m = getModule(**module)
+                if init:
+                    m.apply(Init(init))
+                self.module.append(m)
+            module_params = module_params + list(m.parameters())
+        else:
+            self.module = getModule(**module)
+            if init:
+                self.module.apply(Init(init))
+            module_params = self.module.parameters()
+
+        self.optimizer = getOptimizer(**optimizer, module_params=module_params)
+        self.scheduler = getScheduler(**scheduler, optimizer=self.optimizer)
+        
+        self.criterion = getLoss(**loss)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -118,8 +132,20 @@ class VanillaModel():
 
     def train(self, input, target):
         
-        self.module.train()
-        output = self.module(input)
+        if self.ensemble:
+            output = []
+            for m in self.module:
+                m.train()
+                out = m(input)
+                out = F.sigmoid(out)
+                output.append(out)
+            output = torch.stack(output, dim=0)
+            output = torch.mean(output, dim=0)
+        else:
+            self.module.train()
+            output = self.module(input)
+            output = F.sigmoid(output)
+
         loss = self.criterion(output, target)
         self.optimizer.zero_grad()   
         loss.backward()         
@@ -129,10 +155,39 @@ class VanillaModel():
     
     def validate(self, input, target):
 
-        self.module.eval()
+        
         with torch.no_grad():
-            output = self.module(input)
+            if self.ensemble:
+                output = []
+                for m in self.module:
+                    m.eval()
+                    out = m(input)
+                    output.append(out)
+                output = torch.stack(output, dim=0)
+                output = torch.mean(output, dim=0)
+            else:
+                self.module.eval()
+                output = self.module(input)
+            output = F.sigmoid(output)
         loss = self.criterion(output, target)
+
+        return loss, output
+
+    def test(self, input, target):
+        with torch.no_grad():
+            if self.ensemble:
+                output = []
+                for m in self.module:
+                    m.eval()
+                    out = m(input)
+                    output.append(out)
+                output = torch.stack(output, dim=0)
+                output = torch.mean(output, dim=0)
+            else:
+                self.module.eval()
+                output = self.module(input)
+            output = F.sigmoid(output)
+        loss = self.criterion(output, target, reduce=False)
 
         return loss, output
 
@@ -142,46 +197,76 @@ class VanillaModel():
         LOG('tensorboard', type='scalar', turn='train', 
             name='learning_rate', epoch=epoch, values=lr)
 
-        module = self.module.module if torch.cuda.device_count() > 1 else self.module
-
-        for tag, value in module.named_parameters():
-            tag = tag.replace('.', '/')
-            LOG('tensorboard', type='histogram', turn='train', 
-                name=tag, epoch=epoch, values=value.data.cpu().numpy())
-            LOG('tensorboard', type='histogram', turn='train', 
-                name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+        if self.ensemble:
+            for i, m in enumerate(self.module):
+                m = m.module if torch.cuda.device_count() > 1 else m
+                for tag, value in m.named_parameters():
+                    tag = str(i) + '_' + tag.replace('.', '/')
+                    LOG('tensorboard', type='histogram', turn='train', 
+                        name=tag, epoch=epoch, values=value.data.cpu().numpy())
+                    LOG('tensorboard', type='histogram', turn='train', 
+                        name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+        else:  
+            module = self.module.module if torch.cuda.device_count() > 1 else self.module
+            for tag, value in module.named_parameters():
+                tag = tag.replace('.', '/')
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name=tag, epoch=epoch, values=value.data.cpu().numpy())
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
         
         self.scheduler.step()
 
     def modelSummary(self, input_size, LOG):
-        LOG('model', title=self.module.__class__.__name__, model=self.module, input_size=input_size)
-
-    def getLog(self):
-        pass
+        module = self.module[0] if self.ensemble else self.module
+        
+        LOG('model', title=module.__class__.__name__, model=module, input_size=input_size)
 
     def gpu(self):
-        if torch.cuda.device_count() > 1:
-            self.module = torch.nn.DataParallel(self.module)
+        if self.ensemble:
+            if torch.cuda.device_count() > 1:
+                self.module = [torch.nn.DataParallel(m) for m in self.module]
 
-        if torch.cuda.is_available():
-            self.module = self.module.to(self.device)
-            self.criterion = self.criterion.to(self.device)
-            torch.backends.cudnn.benchmark = True
+            if torch.cuda.is_available():
+                self.module = [m.to(self.device) for m in self.module]
+                self.criterion = self.criterion.to(self.device)
+                torch.backends.cudnn.benchmark = True
+            else:
+                print("CUDA is unavailable")
+
         else:
-            print("CUDA is unavailable")
+            if torch.cuda.device_count() > 1:
+                self.module = torch.nn.DataParallel(self.module)
+
+            if torch.cuda.is_available():
+                self.module = self.module.to(self.device)
+                self.criterion = self.criterion.to(self.device)
+                torch.backends.cudnn.benchmark = True
+            else:
+                print("CUDA is unavailable")
 
     def checkpoint(self, epoch, path):
-
-        module = self.module.module if torch.cuda.device_count() > 1 else self.module
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
         filename = "{}{}.pth.tar".format(path, epoch)
 
         state = {
             'epoch': epoch,
-            'state_dict': module.state_dict(),
-            'optimizer' : self.optimizer.state_dict(),
         }
+
+        if self.ensemble:
+            state_dicts = []
+            for m in self.module:
+                m = m.module if torch.cuda.device_count() > 1 else m
+                state_dicts.append(m.state_dict())
+            state['state_dict'] = state_dicts
+            state['optimizer'] = self.optimizer.state_dict()
+
+        else:
+            module = self.module.module if torch.cuda.device_count() > 1 else self.module
+            state['state_dict'] = module.state_dict()
+            state['optimizer'] = self.optimizer.state_dict()
+
         torch.save(state, filename)
 
     def load(self, path):
@@ -190,7 +275,11 @@ class VanillaModel():
 
             checkpoint = torch.load(path)
             epoch = checkpoint['epoch'] + 1
-            self.module.load_state_dict(checkpoint['state_dict'])
+            if self.ensemble:
+                for module, state_dict in zip(self.module, checkpoint['state_dict']):
+                    module.load_state_dict(state_dict)
+            else:
+                self.module.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
 
             print("=> loaded checkpoint '{}' (epoch {})".format(path, epoch))

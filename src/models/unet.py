@@ -95,10 +95,9 @@ class UpBlock(nn.Module):
         return x
 
 class UNet(nn.Module):
-    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False, sigmoid=True):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
         super(UNet, self).__init__()
         self.UNIT = unit
-        self.sigmoid = sigmoid
         self.in_conv = InBlock(channels, self.UNIT)
         self.down1 = DownBlock(self.UNIT, self.UNIT*2)
         self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
@@ -122,17 +121,14 @@ class UNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         x = self.out_conv(x)
-        if self.sigmoid:
-            x = F.sigmoid(x)
 
         return x
 
 
 class WNet(nn.Module):
-    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False, sigmoid=True):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
         super(WNet, self).__init__()
         self.UNIT = unit
-        self.sigmoid = sigmoid
         self.in_conv = InBlock(channels, self.UNIT)
         self.down1 = DownBlock(self.UNIT, self.UNIT*2)
         self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
@@ -179,15 +175,13 @@ class WNet(nn.Module):
         x = self.up3_1(x, x2)
         x = self.up4_1(x, x1)
         x = self.out_conv2(x)
-        if self.sigmoid:
-            x = F.sigmoid(x)
 
         return x
 
 class RecurNet(nn.Module):
     def __init__(self, channels, classes, unit=4, loop=4):
         super(RecurNet, self).__init__()
-        self.base = UNet(channels+1, classes, False, unit, sigmoid=False)
+        self.base = UNet(channels+1, classes, False, unit)
         self.loop = loop
         self.outblock = conv_1(2 * self.loop, 2)
 
@@ -204,13 +198,12 @@ class RecurNet(nn.Module):
            
         out = torch.cat(out, dim=1)
         out = self.outblock(out)
-        out = F.sigmoid(out)
         return out
 
 class RecurNet2(nn.Module):
     def __init__(self, channels, classes, unit=4, loop=4):
         super(RecurNet2, self).__init__()
-        self.base = UNet(channels+1, classes, False, unit, sigmoid=False)
+        self.base = UNet(channels+1, classes, False, unit)
         self.loop = loop
         self.outblock = conv_1(2 * self.loop, 2)
 
@@ -229,5 +222,4 @@ class RecurNet2(nn.Module):
            
         out = torch.cat(out, dim=1)
         out = self.outblock(out)
-        out = F.sigmoid(out)
         return out

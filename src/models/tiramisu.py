@@ -96,7 +96,6 @@ class FCDenseNet(nn.Module):
             out = self.denseBlocksUp[i](out)
 
         out = self.finalConv(out)
-        out = F.sigmoid(out)
         return out
 
 def FCDenseNetSmall(in_channels, n_classes):

@@ -10,6 +10,7 @@ from utils import AverageMeter, GeometricMeter, ImageMeter, ClassMeter
 
 import seaborn as sns
 import itertools
+import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
@@ -92,8 +93,7 @@ def plot_histogram(values, title, path):
 class Inference():
     
     def __init__(self, model, datasets, metrics, visualizations, LOG):
-        self.model = model.module.cpu()
-        self.criterion = model.criterion.cpu()
+        self.model = model
         self.datasets = datasets
         self.LOG = LOG
         self.path = LOG.log_dir_base
@@ -119,12 +119,11 @@ class Inference():
         with torch.no_grad():
             for input, target, index in dataloaders[turn]:
                 start =  time.time()
-                self.model.train()
-                output = self.model(input)
+
+                loss, output = self.model.test(input, target)
                 inferenceTime = time.time() - start
 
                 index = index.item()
-                loss = self.criterion(output, target, reduce=False)
                 losses[index] = loss.item()
                 
                 output_image.update(output)
