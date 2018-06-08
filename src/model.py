@@ -375,9 +375,9 @@ class GANModel():
             output = self.G(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target)
-        return loss.cpu().item(), cuda(output)
+        return loss.cpu().item(), cpu(output)
 
-    def step(self, epoch, LOG):
+    def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]
         LOG('tensorboard', type='scalar', turn='train', 
             name='learning_rate/generator', epoch=epoch, values=lr_G)
@@ -388,23 +388,23 @@ class GANModel():
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), 1)
         # torch.nn.utils.clip_grad_norm_(self.D.parameters(), 1)
         clip = 1
-    
-        G = self.G.module if torch.cuda.device_count() > 1 else self.G
-        D = self.D.module if torch.cuda.device_count() > 1 else self.D
-        for tag, value in G.named_parameters():
-            tag = tag.replace('.', '/')
-            # value.grad.data.clamp_(-clip,clip)
-            LOG('tensorboard', type='histogram', turn='train', 
-                name='G/'+tag, epoch=epoch, values=value.data.cpu().numpy())
-            LOG('tensorboard', type='histogram', turn='train', 
-                name='G/'+tag+'/grad', epoch=epoch, values=value.grad.data.cpu().numpy())
-        for tag, value in D.named_parameters():
-            tag = tag.replace('.', '/')
-            # value.grad.data.clamp_(-clip,clip)
-            LOG('tensorboard', type='histogram', turn='train', 
-                name='D/'+tag, epoch=epoch, values=value.data.cpu().numpy())
-            LOG('tensorboard', type='histogram', turn='train', 
-                name='D/'+tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+        if histo:
+            G = self.G.module if torch.cuda.device_count() > 1 else self.G
+            D = self.D.module if torch.cuda.device_count() > 1 else self.D
+            for tag, value in G.named_parameters():
+                tag = tag.replace('.', '/')
+                # value.grad.data.clamp_(-clip,clip)
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name='G/'+tag, epoch=epoch, values=value.data.cpu().numpy())
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name='G/'+tag+'/grad', epoch=epoch, values=value.grad.data.cpu().numpy())
+            for tag, value in D.named_parameters():
+                tag = tag.replace('.', '/')
+                # value.grad.data.clamp_(-clip,clip)
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name='D/'+tag, epoch=epoch, values=value.data.cpu().numpy())
+                LOG('tensorboard', type='histogram', turn='train', 
+                    name='D/'+tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
 
         self.scheduler_D.step()
         self.scheduler_G.step()
