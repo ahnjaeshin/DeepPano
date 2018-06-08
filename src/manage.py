@@ -130,7 +130,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
     for tooth in root.iter('Tooth'):
 
         print(tooth.attrib)
-        toothNum = int(tooth.attrib['Number'])
+        toothNum = str(tooth.attrib['Number'])
         thisTitle = imageTitle + '-' + str(toothNum)
         coords = genCoordsFromTooth(tooth)
         
@@ -236,7 +236,7 @@ def extractImgsFromPsd(annotPsd, imgShape):
         b3, b4 = layer.bbox.x1, layer.bbox.x2
         annotImg[b1:b2, b3:b4] = layerImg
         annotImg = cv2.flip(annotImg, 0) # flip
-        annotImgs[layer.name] = annotImg
+        annotImgs[layer.name.strip()] = annotImg
 
     return annotImgs
 
