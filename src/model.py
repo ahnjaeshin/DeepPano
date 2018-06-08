@@ -375,7 +375,7 @@ class GANModel():
             output = self.G(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target)
-        return loss.cpu().item(), cpu(output)
+        return loss.cpu(), cpu(output)
 
     def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]

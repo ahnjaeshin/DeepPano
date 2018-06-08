@@ -87,9 +87,12 @@ class DICELoss(_WeightedLoss):
             return loss.sum()
 
 
-class GANLoss:
+class GANLoss(_WeightedLoss):
     
-    def __init__(self, lsgan=False, reduce=True):
+    def __init__(self, lsgan=False, weight=None, size_average=True, reduce=True):
+        if weight is not None:
+            weight = torch.tensor(weight).float()
+        super(GANLoss, self).__init__(weight, size_average, reduce)
         self.lsgan = lsgan
         self.loss = nn.MSELoss(reduce=reduce) if lsgan else nn.BCEWithLogitsLoss(reduce=reduce)
     
