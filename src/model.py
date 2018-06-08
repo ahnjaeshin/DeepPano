@@ -3,7 +3,7 @@ from utils import TypeParser
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import loss
+import loss as L
 import os
 import numpy as np
 import torch.nn.functional as F
@@ -41,6 +41,7 @@ def getOptimizer(type, param, module_params):
     optimParser = TypeParser(types = {
         "SGD": torch.optim.SGD,
         "ADAM": torch.optim.Adam,
+        "RMS": torch.optim.RMSprop,
     })
     param['params'] = module_params
     return optimParser(type, param)
@@ -55,9 +56,10 @@ def getScheduler(type, param, optimizer):
 
 def getLoss(type, param):
     lossParser = TypeParser(types = {
-        "IOU": loss.IOULoss,
-        "DICE": loss.DICELoss,
+        "IOU": L.IOULoss,
+        "DICE": L.DICELoss,
         "CE": nn.CrossEntropyLoss,
+        "GAN": L.GANLoss,
     })
     return lossParser(type, param)
 
@@ -71,12 +73,14 @@ def getModule(type, param):
         'FCDenseNet103': tiramisu.FCDenseNet103,
         'RecurNet': unet.RecurNet,
         'RecurNet2': unet.RecurNet2,
+        'SimpleClassify': unet.SimpleClassify,
     })
     return moduleParser(type, param)
 
 def getModel(category, param):
     modelParser = TypeParser(types = {
         "Vanilla": VanillaModel,
+        "GAN": GANModel,
     })
     MODEL = modelParser(category, param)
 
@@ -289,6 +293,146 @@ class VanillaModel():
 
         return epoch
 
-# class GANModel():
+class GANModel():
 
-    # def __init__(self, module_g, module_d, )
+    def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
+        self.G = unet.UNet(2, 2, False, 4)
+        self.D = unet.SimpleClassify(4, 1, 4)
+        if init:
+            init_func = Init(init)
+            self.G.apply(init_func)
+            self.D.apply(init_func)
+
+        self.optimizer_G = getOptimizer(**optimizer, module_params=self.G.parameters())
+        self.optimizer_D = getOptimizer(**optimizer, module_params=self.D.parameters())
+
+        self.scheduler_G = getScheduler(**scheduler, optimizer=self.optimizer_G)
+        self.scheduler_D = getScheduler(**scheduler, optimizer=self.optimizer_D)
+
+        self.criterion = getLoss(**loss)
+        self.ganLoss = L.GANLoss(lsgan=True)
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def __call__(self, input, target, turn):
+        assert set(np.unique(target[0])).issubset({0,1})
+        batch_size = input.size(0)
+        real_label = cuda(torch.ones((batch_size)), self.device)
+        fake_label = cuda(torch.zeros((batch_size)), self.device)
+        input, target = cuda(input, self.device), cuda(target, self.device, True)
+
+        if turn == 'train':
+            loss, output = self.train(input, target, fake_label, real_label)
+        elif turn == 'val':
+            loss, output = self.validate(input, target)
+
+        return loss, cpu(output)
+
+
+    def train(self, input, target, fake_label, real_label):
+        # D: maximize log(D(x,y)) + log(1 - D(x,G(x)))
+        ## Real
+        real_pair = torch.cat([input, target], dim=1)
+        real_pred = self.D(real_pair)
+        real_D_loss = self.ganLoss(real_pred, real_label)
+        ## Fake
+        fake_target = self.G(input)
+        fake_target = F.sigmoid(fake_target)
+        fake_pair = torch.cat([input, fake_target], dim=1)
+        fake_pred = self.D(fake_pair.detach())
+        fake_D_loss = self.ganLoss(fake_pred, fake_label)
+
+        self.optimizer_D.zero_grad()
+        loss_D = real_D_loss * 0.5 + fake_D_loss * 0.5
+        loss_D.backward()
+        self.optimizer_D.step()
+
+        # G: maximize log(D(x,G(x))) + L1(y,G(x))
+        fake_pair = torch.cat([input, fake_target], dim=1)
+        fake_pred = self.D(fake_pair)
+        fake_G_loss = self.ganLoss(fake_pred, fake_label)
+        # seg_loss = self.criterion(fake_target, target) * 0.1
+        self.optimizer_G.zero_grad()
+        loss_G = fake_G_loss # + seg_loss
+        loss_G.backward()
+        self.optimizer_G.step()
+
+        loss = loss_D.cpu().item() + loss_G.cpu().item()
+        return loss, fake_target
+
+    def validate(self, input, target):
+        with torch.no_grad():
+            self.G.eval()
+            output = self.G(input)
+            output = F.sigmoid(output)
+        loss = self.criterion(output, target)
+        return loss.cpu().item(), output
+
+    def test(self, input, target):
+        with torch.no_grad():
+            self.G.eval()
+            output = self.G(input)
+            output = F.sigmoid(output)
+        loss = self.criterion(output, target)
+        return loss, output
+
+    def step(self, epoch, LOG):
+        lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]
+        LOG('tensorboard', type='scalar', turn='train', 
+            name='learning_rate/generator', epoch=epoch, values=lr_G)
+        lr_D = [group['lr'] for group in self.optimizer_D.param_groups][0]
+        LOG('tensorboard', type='scalar', turn='train', 
+            name='learning_rate/discriminator', epoch=epoch, values=lr_D)
+
+        # torch.nn.utils.clip_grad_norm_(self.G.parameters(), 1)
+        # torch.nn.utils.clip_grad_norm_(self.D.parameters(), 1)
+        clip = 1
+    
+        G = self.G.module if torch.cuda.device_count() > 1 else self.G
+        D = self.D.module if torch.cuda.device_count() > 1 else self.D
+        for tag, value in G.named_parameters():
+            tag = tag.replace('.', '/')
+            # value.grad.data.clamp_(-clip,clip)
+            LOG('tensorboard', type='histogram', turn='train', 
+                name='G/'+tag, epoch=epoch, values=value.data.cpu().numpy())
+            LOG('tensorboard', type='histogram', turn='train', 
+                name='G/'+tag+'/grad', epoch=epoch, values=value.grad.data.cpu().numpy())
+        for tag, value in D.named_parameters():
+            tag = tag.replace('.', '/')
+            # value.grad.data.clamp_(-clip,clip)
+            LOG('tensorboard', type='histogram', turn='train', 
+                name='D/'+tag, epoch=epoch, values=value.data.cpu().numpy())
+            LOG('tensorboard', type='histogram', turn='train', 
+                name='D/'+tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+
+        self.scheduler_D.step()
+        self.scheduler_G.step()
+    
+    def modelSummary(self, input_size, LOG):
+        c, h, w = input_size
+        G_size = (2, h, w)
+        D_size = (4, h, w)
+        LOG('model', title='Generator/'+self.G.__class__.__name__, model=self.G, input_size=G_size)
+        # LOG('model', title='Discriminator/'+self.D.__class__.__name__, model=self.D, input_size=D_size)
+
+
+
+    def gpu(self):
+        if torch.cuda.device_count() > 1:
+            self.G = torch.nn.DataParallel(self.G)
+            self.D = torch.nn.DataParallel(self.D)
+
+        if torch.cuda.is_available():
+            self.G = self.G.to(self.device)
+            self.D = self.D.to(self.device)
+            self.criterion = self.criterion.to(self.device)
+            self.ganLoss = self.ganLoss.to(self.device)
+            torch.backends.cudnn.benchmark = True
+        else:
+            print("CUDA is unavailable")
+
+    def checkpoint(self, epoch, path):
+        pass
+
+    def load(self, path):
+        pass

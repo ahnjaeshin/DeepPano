@@ -125,6 +125,31 @@ class UNet(nn.Module):
         return x
 
 
+class SimpleClassify(nn.Module):
+    def __init__(self, channels, classes, unit=4, dropout=False):
+        super(SimpleClassify, self).__init__()
+        self.UNIT = unit
+        self.in_conv = InBlock(channels, self.UNIT)
+        self.down1 = DownBlock(self.UNIT, self.UNIT*2)
+        self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3 = DownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4 = DownBlock(self.UNIT*8, self.UNIT*8)
+        self.dropout = dropout
+        self.dropout1 = nn.Dropout(inplace=True)
+
+    def forward(self, x):
+        x = self.in_conv(x)
+        x = self.down1(x)
+        x = self.down2(x)
+        x = self.down3(x)
+        x = self.down4(x)
+        if self.dropout:
+            x = self.dropout1(x)
+        x = torch.mean(x.view(x.size(0), -1), dim=1)
+
+        return x
+
+
 class WNet(nn.Module):
     def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
         super(WNet, self).__init__()

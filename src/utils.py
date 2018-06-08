@@ -286,7 +286,11 @@ class Logger:
         elif type == 'image':
             self.writers[turn].add_image(name, make_grid(values, normalize=True, scale_each=True), epoch)
         elif type == 'histogram':
-            self.writers[turn].add_histogram(name, values, epoch, bins='doane')
+            try:
+                self.writers[turn].add_histogram(name, values, epoch, bins='doane')
+            except:
+                print(name)
+                exit(0)
         elif type == 'pr':
             target, output = values
             self.writers[turn].add_pr_curve(name, target, output, epoch)

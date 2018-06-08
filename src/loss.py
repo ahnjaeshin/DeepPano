@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch.nn.modules.loss import _Loss, _WeightedLoss
+
     
 class IOULoss(_WeightedLoss):
     """1 - jaccard index
@@ -84,3 +85,17 @@ class DICELoss(_WeightedLoss):
             return loss.mean()
         else:
             return loss.sum()
+
+
+class GANLoss:
+    
+    def __init__(self, lsgan=False, reduce=True):
+        self.lsgan = lsgan
+        self.loss = nn.MSELoss(reduce=reduce) if lsgan else nn.BCEWithLogitsLoss(reduce=reduce)
+    
+    def __call__(self, output, target):
+        if self.lsgan:
+            output = F.sigmoid(output)
+            return self.loss(output, target)
+        else:
+            return self.loss(output, target)
