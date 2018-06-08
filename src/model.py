@@ -369,6 +369,7 @@ class GANModel():
         return loss.cpu().item(), output
 
     def test(self, input, target):
+        input, target = cuda(input, self.device), cuda(target, self.device, True)
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
