@@ -11,6 +11,34 @@ import imgaug as ia
 def resetSeed(seed):
     """seed: seed value of random packages"""
     random.seed(seed)
+    
+def getAugmentation(augments, param):
+    
+    def lookupAugment(category, type, param=None):
+        types = {
+            "HFlip": T.RandomHorizontalFlip,
+            "VFlip": T.RandomVerticalFlip,
+            "Rotate": T.RandomRotation,
+            "Crop": T.RandomCrop,
+            "Cutout": Cutout,
+            "Random": RandomAug
+        }
+
+        categories = {
+            "All": ToAll,
+            "Input": InputOnly,
+            "Target": TargetOnly,
+            "Pano": PanoOnly,
+            "Box": BoxOnly,
+            "PanoTarget": PanoTarget,
+        }
+
+        aug_func = types[type]() if param is None else types[type](**param)
+        return categories[category](aug_func)
+
+    return TripleAugment([lookupAugment(**a) for a in augments], **param)
+
+
 
 class Augment():
 
