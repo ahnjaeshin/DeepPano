@@ -104,7 +104,7 @@ class VanillaModel():
                 if init:
                     m.apply(Init(init))
                 self.module.append(m)
-            module_params = module_params + list(m.parameters())
+                module_params = module_params + list(m.parameters())
         else:
             self.module = getModule(**module)
             if init:
@@ -288,3 +288,7 @@ class VanillaModel():
             print("=> no checkpoint found at '{}'".format(path))
 
         return epoch
+
+# class GANModel():
+
+    # def __init__(self, module_g, module_d, )
