@@ -73,6 +73,16 @@ class DownBlock(nn.Module):
         x = self.layer(x)
         return x
 
+class StableDownBlock(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super(StableDownBlock, self).__init__()
+        self.down = nn.AvgPool2d(2)
+        self.layer = ConvBlock(in_channel, out_channel)
+    def forward(self, x):
+        x = self.down(x)
+        x = self.layer(x)
+        return x
+
 class UpBlock(nn.Module):
     def __init__(self, in_channel, forward_channel, out_channel, bilinear):
         super(UpBlock, self).__init__()
@@ -124,16 +134,45 @@ class UNet(nn.Module):
 
         return x
 
+class StableUNet(nn.Module):
+    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
+        super(StableUNet, self).__init__()
+        self.UNIT = unit
+        self.in_conv = InBlock(channels, self.UNIT)
+        self.down1 = StableDownBlock(self.UNIT, self.UNIT*2)
+        self.down2 = StableDownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3 = StableDownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4 = StableDownBlock(self.UNIT*8, self.UNIT*8)
+        self.dropout1 = nn.Dropout()
+        self.up1 = UpBlock(self.UNIT*8, self.UNIT*8, self.UNIT*4, bilinear)
+        self.up2 = UpBlock(self.UNIT*4, self.UNIT*4, self.UNIT*2, bilinear)
+        self.up3 = UpBlock(self.UNIT*2, self.UNIT*2, self.UNIT, bilinear)
+        self.up4 = UpBlock(self.UNIT, self.UNIT, self.UNIT, bilinear)
+        self.out_conv = OutBlock(self.UNIT, classes)
+
+    def forward(self, x):
+        x1 = self.in_conv(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.out_conv(x)
+
+        return x
 
 class SimpleClassify(nn.Module):
     def __init__(self, channels, classes, unit=4, dropout=False):
         super(SimpleClassify, self).__init__()
         self.UNIT = unit
         self.in_conv = InBlock(channels, self.UNIT)
-        self.down1 = DownBlock(self.UNIT, self.UNIT*2)
-        self.down2 = DownBlock(self.UNIT*2, self.UNIT*4)
-        self.down3 = DownBlock(self.UNIT*4, self.UNIT*8)
-        self.down4 = DownBlock(self.UNIT*8, self.UNIT*8)
+        self.down1 = StableDownBlock(self.UNIT, self.UNIT*2)
+        self.down2 = StableDownBlock(self.UNIT*2, self.UNIT*4)
+        self.down3 = StableDownBlock(self.UNIT*4, self.UNIT*8)
+        self.down4 = StableDownBlock(self.UNIT*8, self.UNIT*8)
         self.dropout = dropout
         self.dropout1 = nn.Dropout(inplace=True)
 

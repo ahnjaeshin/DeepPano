@@ -73,6 +73,12 @@ def getModule(type, param):
         'FCDenseNet103': tiramisu.FCDenseNet103,
         'RecurNet': unet.RecurNet,
         'RecurNet2': unet.RecurNet2,
+    })
+    return moduleParser(type, param)
+
+def getGANModule(type, param):
+    moduleParser = TypeParser(types = {
+        'UNET': unet.StableUNet,
         'SimpleClassify': unet.SimpleClassify,
     })
     return moduleParser(type, param)
@@ -296,15 +302,15 @@ class VanillaModel():
 class GANModel():
 
     def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
-        self.G = unet.UNet(2, 2, False, 4)
+        self.G = getGANModule(**module)
         self.D = unet.SimpleClassify(4, 1, 4)
         if init:
             init_func = Init(init)
             self.G.apply(init_func)
             self.D.apply(init_func)
 
-        self.optimizer_G = getOptimizer(**optimizer, module_params=self.G.parameters())
-        self.optimizer_D = getOptimizer(**optimizer, module_params=self.D.parameters())
+        self.optimizer_G = torch.optim.Adam(params=self.G.parameters(), lr=0.001)
+        self.optimizer_D = torch.optim.SGD(params=self.G.parameters(), lr=0.001)
 
         self.scheduler_G = getScheduler(**scheduler, optimizer=self.optimizer_G)
         self.scheduler_D = getScheduler(**scheduler, optimizer=self.optimizer_D)
@@ -336,8 +342,8 @@ class GANModel():
         real_pred = self.D(real_pair)
         real_D_loss = self.ganLoss(real_pred, real_label)
         ## Fake
-        fake_target = self.G(input)
-        fake_target = F.sigmoid(fake_target)
+        fake_target_org = self.G(input)
+        fake_target = F.tanh(fake_target_org)
         fake_pair = torch.cat([input, fake_target], dim=1)
         fake_pred = self.D(fake_pair.detach())
         fake_D_loss = self.ganLoss(fake_pred, fake_label)
@@ -347,18 +353,18 @@ class GANModel():
         loss_D.backward()
         self.optimizer_D.step()
 
-        # G: maximize log(D(x,G(x))) + L1(y,G(x))
+        # G: maximize log(D(x,G(x))) + DICE(y,G(x))
         fake_pair = torch.cat([input, fake_target], dim=1)
         fake_pred = self.D(fake_pair)
         fake_G_loss = self.ganLoss(fake_pred, fake_label)
-        # seg_loss = self.criterion(fake_target, target) * 0.1
+        seg_loss = self.criterion(F.sigmoid(fake_target_org), target) * 10
         self.optimizer_G.zero_grad()
-        loss_G = fake_G_loss # + seg_loss
+        loss_G = fake_G_loss + seg_loss
         loss_G.backward()
         self.optimizer_G.step()
 
         loss = loss_D.cpu().item() + loss_G.cpu().item()
-        return loss, fake_target
+        return loss, F.sigmoid(fake_target_org)
 
     def validate(self, input, target):
         with torch.no_grad():
@@ -416,8 +422,6 @@ class GANModel():
         LOG('model', title='Generator/'+self.G.__class__.__name__, model=self.G, input_size=G_size)
         # LOG('model', title='Discriminator/'+self.D.__class__.__name__, model=self.D, input_size=D_size)
 
-
-
     def gpu(self):
         if torch.cuda.device_count() > 1:
             self.G = torch.nn.DataParallel(self.G)
@@ -436,4 +440,16 @@ class GANModel():
         pass
 
     def load(self, path):
-        pass
+        if os.path.isfile(path):
+            print("=> loading checkpoint '{}'".format(path))
+
+            checkpoint = torch.load(path)
+            epoch = checkpoint['epoch'] + 1
+            self.G.load_state_dict(checkpoint['state_dict'])
+
+            print("=> loaded checkpoint '{}' (epoch {})".format(path, epoch))
+        else:
+            epoch = 0
+            print("=> no checkpoint found at '{}'".format(path))
+
+        return 0
