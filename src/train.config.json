@@ -5,7 +5,7 @@
 
     "logging": {
         "log": true,
-        "title": "split3"
+        "title": "dna2"
     },
 
     "augmentation": {
@@ -32,7 +32,7 @@
         "category": "Vanilla",
         "param": {
             "module": {
-                "type": "Split",
+                "type": "DNA",
                 "param": {
                     "channels": 2,
                     "classes": 2,

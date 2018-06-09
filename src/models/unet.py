@@ -105,7 +105,7 @@ class UpBlock(nn.Module):
         return x
 
 class UNet(nn.Module):
-    def __init__(self, channels, classes, bilinear=True, unit=4, dropout=False):
+    def __init__(self, channels, classes, bilinear=False, unit=4, dropout=False):
         super(UNet, self).__init__()
         self.UNIT = unit
         self.in_conv = InBlock(channels, self.UNIT)

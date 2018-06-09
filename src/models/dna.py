@@ -40,7 +40,7 @@ class ConvBlock(nn.Module):
     """
     ( 3x3 conv -> batch norm -> lrelu ) x 2
     """
-    def __init__(self, in_channel, out_channel, se=True):
+    def __init__(self, in_channel, out_channel, se=False):
         super(ConvBlock, self).__init__()
         self.conv1 = conv_3(in_channel, out_channel)
         self.bn1 = nn.BatchNorm2d(out_channel)
@@ -147,3 +147,82 @@ class SplitNet(nn.Module):
         o_minor = self.minor(x)
         out = torch.cat([o_major, o_minor], dim=1)
         return out
+
+class CrossNet(nn.Module):
+    def __init__(self, channels, classes, unit=4, dropout=False):
+        super(CrossNet, self).__init__()
+        self.share1 = Encoder(channels, unit)
+        self.dropout = dropout
+        self.drop1 = nn.Dropout2d(p=0.5)
+        self.major1 = Decoder(1, unit)
+        self.minor1 = Decoder(1, unit)
+        self.share2 = Encoder(channels, unit)
+        self.drop2 = nn.Dropout2d(p=0.5)
+        self.major2 = Decoder(1, unit)
+        self.minor2 = Decoder(1, unit)
+    def forward(self, x):
+        x = self.share1(x)
+        if self.dropout:
+            x[0] = self.drop1(x[0])
+        o_major = self.major1(x)
+        o_minor = self.minor1(x)
+        out = torch.cat([o_major, o_minor], dim=1)
+
+        x = self.share2(out)
+        if self.dropout:
+            x[0] = self.drop2(x[0])
+        o_major = self.major2(x)
+        o_minor = self.minor2(x)
+        out = torch.cat([o_major, o_minor], dim=1)
+        return out
+
+class MiniDecoder(nn.Module):
+    def __init__(self, in_c, out_c):
+        super(MiniDecoder, self).__init__()
+        self.major = UpBlock(in_c, in_c, out_c)
+        self.minor = UpBlock(in_c, in_c, out_c)
+        self.shrink = conv_1(out_c *2, out_c)
+    def forward(self, x, skip):
+        o_1 = self.major(x, skip)
+        o_2 = self.minor(x, skip)
+        x = torch.cat([o_1, o_2], dim=1)
+        x = self.shrink(x)
+        return x
+
+class CrossDecoder(nn.Module):
+    def __init__(self, classes, unit=4):
+        super(CrossDecoder, self).__init__()
+        self.U = unit
+        self.u1 = MiniDecoder(self.U*8, self.U*4)
+        self.u2 = MiniDecoder(self.U*4, self.U*2)
+        self.u3 = MiniDecoder(self.U*2, self.U)
+        self.u4 = MiniDecoder(self.U, self.U)
+        self.out1 = ConvBlock(self.U, classes // 2)
+        self.out2 = ConvBlock(self.U, classes // 2)
+    def forward(self, x):
+        x5, x4, x3, x2, x1 = x
+        x = self.u1(x5, x4)
+        x = self.u2(x, x3)
+        x = self.u3(x, x2)
+        x = self.u4(x, x1)
+        o1 = self.out1(x)
+        o2 = self.out2(x)
+        x = torch.cat([o1, o2], dim=1)
+        return x
+
+class DNANet(nn.Module):
+    def __init__(self, channels, classes, unit=4, dropout=False):
+        super(DNANet, self).__init__()
+        self.share = Encoder(channels, unit)
+        self.dropout = dropout
+        self.drop = nn.Dropout2d(p=0.5)
+        self.cross = CrossDecoder(classes, unit)
+
+    def forward(self, x):
+        x = self.share(x)
+        if self.dropout:
+            x[0] = self.drop1(x[0])
+        x = self.cross(x)
+        return x
+
+        

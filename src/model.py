@@ -74,6 +74,8 @@ def getModule(type, param):
         'RecurNet': unet.RecurNet,
         'RecurNet2': unet.RecurNet2,
         'Split': dna.SplitNet,
+        'Cross': dna.CrossNet,
+        'DNA': dna.DNANet,
     })
     return moduleParser(type, param)
 
