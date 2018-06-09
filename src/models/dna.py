@@ -48,7 +48,7 @@ class ConvBlock(nn.Module):
         self.conv2 = conv_3(out_channel, out_channel)
         self.bn2 = nn.BatchNorm2d(out_channel)
         self.lrelu2 = nn.LeakyReLU(inplace=True)
-        self.se = se
+        self.do_se = se
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=1, bias=False),
@@ -62,7 +62,7 @@ class ConvBlock(nn.Module):
         out = self.lrelu1(out)
         out = self.conv2(out)
         out = self.bn2(out)
-        if self.se:
+        if self.do_se:
             out = self.se(out)
         out += self.shortcut(x)
         out = self.lrelu2(out)
@@ -176,16 +176,29 @@ class CrossNet(nn.Module):
         out = torch.cat([o_major, o_minor], dim=1)
         return out
 
+# from shuffle net
+def channel_shuffle(x):
+    batch_size, c, h, w = x.size()
+    group_size = c // 2
+    x = x.view(batch_size, 2, group_size, h, w)
+    x = torch.transpose(x, 1, 2).contiguous()
+    x = x.view(batch_size, -1, h, w)
+
+    return x
+
 class MiniDecoder(nn.Module):
-    def __init__(self, in_c, out_c):
+    def __init__(self, in_c, out_c, shuffle=True):
         super(MiniDecoder, self).__init__()
         self.major = UpBlock(in_c, in_c, out_c)
         self.minor = UpBlock(in_c, in_c, out_c)
         self.shrink = conv_1(out_c *2, out_c)
+        self.shuffle = shuffle
     def forward(self, x, skip):
         o_1 = self.major(x, skip)
         o_2 = self.minor(x, skip)
         x = torch.cat([o_1, o_2], dim=1)
+        if self.shuffle:
+            x = channel_shuffle(x)
         x = self.shrink(x)
         return x
 
