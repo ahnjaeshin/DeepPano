@@ -73,6 +73,7 @@ def getModule(type, param):
         'FCDenseNet103': tiramisu.FCDenseNet103,
         'RecurNet': unet.RecurNet,
         'RecurNet2': unet.RecurNet2,
+        'Split': dna.SplitNet,
     })
     return moduleParser(type, param)
 

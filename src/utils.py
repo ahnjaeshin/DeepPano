@@ -138,7 +138,15 @@ def model_summary(model, input_size):
 
             m_key = '%s-%i' % (class_name, module_idx+1)
             summary[m_key] = OrderedDict()
-            summary[m_key]['input_shape'] = list(input[0].size())
+            if type(input[0]) is tuple or type(input[0]) is list:
+                total_input_size = []
+                for i in input[0]:
+                    input_size = list(i.size())
+                    input_size[0] = -1
+                    total_input_size = total_input_size + input_size
+                summary[m_key]['input_shape'] = total_input_size
+            else:
+                summary[m_key]['input_shape'] = list(input[0].size())
             summary[m_key]['input_shape'][0] = -1
             summary[m_key]['depth'] = calculate_depth(module)
             if isinstance(output, (list,tuple)):

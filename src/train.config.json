@@ -5,7 +5,7 @@
 
     "logging": {
         "log": true,
-        "title": "gan"
+        "title": "split3"
     },
 
     "augmentation": {
@@ -29,23 +29,22 @@
     },
 
     "model": {
-        "category": "GAN",
+        "category": "Vanilla",
         "param": {
             "module": {
-                "type": "UNET",
+                "type": "Split",
                 "param": {
                     "channels": 2,
                     "classes": 2,
-                    "unit": 10,
-                    "bilinear": false
+                    "unit": 10
                 }
             },
             "weight_init": "he_uniform",
             "optimizer": {
-                "type": "RMS",
+                "type": "SGD",
                 "param": {
                     "weight_decay": 1e-5,
-                    "lr": 0.1,
+                    "lr": 1,
                     "momentum": 0.9
                 }
             },
@@ -76,7 +75,7 @@
     ],
 
     "training": {
-        "checkpoint": "/Users/ShinAhnjae/Desktop/3-1/CID/DeepPano/result/runs/pretrain/None_None/checkpoint/99.pth.tar",
+        "checkpoint": "",
         "epochs": 100,
         "batch_size": 10,
         "num_workers": 16,
