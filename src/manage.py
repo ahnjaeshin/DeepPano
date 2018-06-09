@@ -111,7 +111,7 @@ def generateDatasetForEachFile(marginType, outImgPath, row):
 
     doAnnot = False if annotFileName == -1 else True
     isAnnotDir = False
-    if doAnnot and not (annotFileName[-3] == 'psd'):
+    if doAnnot and not (annotFileName[-3:] == 'psd'):
         isAnnotDir = True
 
     panoImg = cv2.flip(cv2.imread(panoFileName, cv2.IMREAD_GRAYSCALE), 0)
