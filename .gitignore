@@ -3,5 +3,5 @@ data/
 train/
 .vscode/
 __pycache__/
-runs/
+result/
 *.pth.tar

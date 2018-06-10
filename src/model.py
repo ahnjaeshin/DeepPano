@@ -7,6 +7,7 @@ import loss as L
 import os
 import numpy as np
 import torch.nn.functional as F
+import scheduler
 
 def cuda(x, device, async=False):
     """for use in gpu
@@ -50,6 +51,7 @@ def getScheduler(type, param, optimizer):
     schedParser = TypeParser(types = {
         "Step": torch.optim.lr_scheduler.StepLR,
         "Plateau": torch.optim.lr_scheduler.ReduceLROnPlateau,
+        "Restart": scheduler.CosineAnnealingLR,
     })
     param["optimizer"] = optimizer
     return schedParser(type, param)
@@ -76,6 +78,7 @@ def getModule(type, param):
         'Split': dna.SplitNet,
         'Cross': dna.CrossNet,
         'DNA': dna.DNANet,
+        'CAP': capsule.CapsNet,
     })
     return moduleParser(type, param)
 
@@ -220,16 +223,18 @@ class VanillaModel():
                     tag = str(i) + '_' + tag.replace('.', '/')
                     LOG('tensorboard', type='histogram', turn='train', 
                         name=tag, epoch=epoch, values=value.data.cpu().numpy())
-                    LOG('tensorboard', type='histogram', turn='train', 
-                        name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+                    if value.grad is not None:
+                        LOG('tensorboard', type='histogram', turn='train', 
+                            name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
         else:  
             module = self.module.module if torch.cuda.device_count() > 1 else self.module
             for tag, value in module.named_parameters():
                 tag = tag.replace('.', '/')
                 LOG('tensorboard', type='histogram', turn='train', 
                     name=tag, epoch=epoch, values=value.data.cpu().numpy())
-                LOG('tensorboard', type='histogram', turn='train', 
-                    name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
+                if value.grad is not None:
+                    LOG('tensorboard', type='histogram', turn='train', 
+                        name=tag+'/grad', epoch=epoch, values=value.grad.cpu().numpy())
         
         self.scheduler.step()
 
