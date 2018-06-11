@@ -71,7 +71,7 @@ class ConvBlock(nn.Module):
 class DownBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
         super(DownBlock, self).__init__()
-        self.down = nn.MaxPool2d(2)
+        self.down = nn.Conv2d(in_channel, in_channel, kernel_size=1, stride=2) # group
         self.layer = ConvBlock(in_channel, out_channel)
     def forward(self, x):
         x = self.down(x)
@@ -80,10 +80,12 @@ class DownBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    def __init__(self, in_channel, forward_channel, out_channel):
+    def __init__(self, in_channel, forward_channel, out_channel, se=True):
         super(UpBlock, self).__init__()
         self.up = nn.ConvTranspose2d(in_channel, in_channel, kernel_size=2, stride=2)
         self.layer = ConvBlock(in_channel + forward_channel, out_channel)
+        self.do_se = se
+        self.se = SELayer(forward_channel)
 
     def forward(self, x, prev):
         x = self.up(x) # in_channel -> in_channel
@@ -91,6 +93,8 @@ class UpBlock(nn.Module):
         diffY = x.size()[3] - prev.size()[3]
         prev = F.pad(prev, (diffX // 2, int(diffX / 2),
                            diffY // 2, int(diffY / 2)))
+        if self.do_se:
+            prev = self.se(prev)
         x = torch.cat([x, prev], dim=1)
         x = self.layer(x) # in_channel + forward_channel => out_channel
         return x
@@ -166,14 +170,15 @@ class CrossNet(nn.Module):
             x[0] = self.drop1(x[0])
         o_major = self.major1(x)
         o_minor = self.minor1(x)
-        out = torch.cat([o_major, o_minor], dim=1)
+        out1 = torch.cat([o_major, o_minor], dim=1)
 
-        x = self.share2(out)
+        x = self.share2(out1)
         if self.dropout:
             x[0] = self.drop2(x[0])
         o_major = self.major2(x)
         o_minor = self.minor2(x)
-        out = torch.cat([o_major, o_minor], dim=1)
+        out2 = torch.cat([o_major, o_minor], dim=1)
+        out = out1 + out2
         return out
 
 # from shuffle net

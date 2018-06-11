@@ -78,7 +78,6 @@ def getModule(type, param):
         'Split': dna.SplitNet,
         'Cross': dna.CrossNet,
         'DNA': dna.DNANet,
-        'CAP': capsule.CapsNet,
     })
     return moduleParser(type, param)
 
@@ -96,6 +95,7 @@ def getModel(category, param):
     modelParser = TypeParser(types = {
         "Vanilla": VanillaModel,
         "GAN": GANModel,
+        "Recur": RecurModel,
     })
     MODEL = modelParser(category, param)
 
@@ -193,6 +193,7 @@ class VanillaModel():
         return loss, output
 
     def test(self, input, target):
+        input, target = cuda(input, self.device), cuda(target, self.device, True)
         with torch.no_grad():
             if self.ensemble:
                 output = []
@@ -348,6 +349,8 @@ class GANModel():
 
     def train(self, input, target, fake_label, real_label):
         # D: maximize log(D(x,y)) + log(1 - D(x,G(x)))
+        self.G.train()
+        self.D.train()
         ## Real
         real_pair = torch.cat([input, target], dim=1)
         real_pred = self.D(real_pair)
@@ -465,29 +468,15 @@ class GANModel():
 
         return 0
 
-
-
 class RecurModel():
     
     def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
-        
         self.ensemble = ensemble
-
-        if self.ensemble:
-            module_params = []
-            self.module = []
-            for i in range(3):
-                m = getModule(**module)
-                if init:
-                    m.apply(Init(init))
-                self.module.append(m)
-                module_params = module_params + list(m.parameters())
-        else:
-            self.module = getModule(**module)
-            if init:
-                self.module.apply(Init(init))
-            module_params = self.module.parameters()
-
+        self.loop = 4
+        self.module = getModule(**module)
+        if init:
+            self.module.apply(Init(init))
+        module_params = self.module.parameters()
         self.optimizer = getOptimizer(**optimizer, module_params=module_params)
         self.scheduler = getScheduler(**scheduler, optimizer=self.optimizer)
         
@@ -509,16 +498,7 @@ class RecurModel():
 
     def train(self, input, target):
         
-        if self.ensemble:
-            output = []
-            for m in self.module:
-                m.train()
-                out = m(input)
-                out = F.sigmoid(out)
-                output.append(out)
-            output = torch.stack(output, dim=0)
-            output = torch.mean(output, dim=0)
-        else:
+        for i in range(self.loop):
             self.module.train()
             output = self.module(input)
             output = F.sigmoid(output)
@@ -531,38 +511,20 @@ class RecurModel():
         return loss, output
     
     def validate(self, input, target):
-
         
         with torch.no_grad():
-            if self.ensemble:
-                output = []
-                for m in self.module:
-                    m.eval()
-                    out = m(input)
-                    output.append(out)
-                output = torch.stack(output, dim=0)
-                output = torch.mean(output, dim=0)
-            else:
-                self.module.eval()
-                output = self.module(input)
+            self.module.eval()
+            output = self.module(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target)
 
         return loss, output
 
     def test(self, input, target):
+        input, target = cuda(input, self.device), cuda(target, self.device, True)
         with torch.no_grad():
-            if self.ensemble:
-                output = []
-                for m in self.module:
-                    m.eval()
-                    out = m(input)
-                    output.append(out)
-                output = torch.stack(output, dim=0)
-                output = torch.mean(output, dim=0)
-            else:
-                self.module.eval()
-                output = self.module(input)
+            self.module.eval()
+            output = self.module(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target, reduce=False)
 
