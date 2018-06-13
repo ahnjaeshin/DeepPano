@@ -406,11 +406,11 @@ class GANModel():
             self.G.eval()
             output = self.G(input)
             out = F.tanh(output)
-            pred_major = self.D(out[:,0,:,:])
-            pred_minor = self.D(out[:,0,:,:])
+            pred_major = self.D(out[:,0:1,:,:])
+            pred_minor = self.D(out[:,1:2,:,:])
 
             D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
-            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) + self.ganLoss(target[:,1,:,:], fake_label)
+            D_real_loss = self.ganLoss(target[:,0:1,:,:], fake_label) + self.ganLoss(target[:,1:2,:,:], fake_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
             G_loss = self.criterion(output, target) /2
             loss = D_loss + G_loss
@@ -428,11 +428,11 @@ class GANModel():
             self.G.eval()
             output = self.G(input)
             out = F.tanh(output)
-            pred_major = self.D(out[:,0,:,:])
-            pred_minor = self.D(out[:,0,:,:])
+            pred_major = self.D(out[:,0:1,:,:])
+            pred_minor = self.D(out[:,1:2,:,:])
 
             D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
-            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) + self.ganLoss(target[:,1,:,:], fake_label)
+            D_real_loss = self.ganLoss(target[:,0:1,:,:], fake_label) + self.ganLoss(target[:,1:2,:,:], fake_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
             G_loss = self.criterion(output, target) /2
             loss = D_loss + G_loss

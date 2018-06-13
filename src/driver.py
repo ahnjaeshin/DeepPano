@@ -76,8 +76,10 @@ def main(experiment, logging, augmentation, dataset, model, metric, training):
         trainer.train(**config["training"])
     except Exception as e:
         LOG('slack', name='warning', values='abrupt end, {}'.format(e))
+        LOG.finish()
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
+        exit(0)
 
     infer = Inference(
         model=MODEL,
