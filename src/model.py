@@ -113,7 +113,7 @@ class BasicModule:
 
 class VanillaModel():
     
-    def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
+    def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False, post=False):
         
         self.ensemble = ensemble
 
@@ -418,6 +418,8 @@ class GANModel():
             loss = D_loss + G_loss
 
             pred = torch.stack([pred_fake_major, pred_fake_minor], dim=1)
+            pred.unsqueeze_(dim=2)
+            pred.unsqueeze_(dim=3)
             output = output + pred
             output = F.sigmoid(output)
             
@@ -443,7 +445,10 @@ class GANModel():
             loss = D_loss + G_loss
 
             pred = torch.stack([pred_fake_major, pred_fake_minor], dim=1)
+            pred.unsqueeze_(dim=2)
+            pred.unsqueeze_(dim=3)
             output = output + pred
+
             output = F.sigmoid(output)
             
         return loss, output
