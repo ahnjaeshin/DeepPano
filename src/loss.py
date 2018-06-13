@@ -39,7 +39,7 @@ class IOULoss(_WeightedLoss):
             loss = loss * self.weight
 
         if not self.reduce:
-            return loss
+            return loss.mean(-1)
         elif self.size_average:
             return loss.mean()
         else:
@@ -80,7 +80,7 @@ class DICELoss(_WeightedLoss):
             loss = loss * self.weight
     
         if not self.reduce:
-            return loss
+            return loss.mean(-1)
         elif self.size_average:
             return loss.mean()
         else:
