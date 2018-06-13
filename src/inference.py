@@ -106,9 +106,9 @@ class Inference():
                 for x in ['train', 'val']}
 
         for turn in ['train', 'val']:
-            self.evaluate(k, turn, dataloaders)
+            self.evaluate(turn, dataloaders)
 
-    def evaluate(self, k, turn, dataloaders):
+    def evaluate(self, turn, dataloaders):
         losses = {}
         metric_results = [{} for m in self.metrics]
         output_image = ImageMeter()
