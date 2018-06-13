@@ -212,10 +212,6 @@ class DICE_SEG(SegmentationMetric):
         union = np.logical_or(output, target).sum(axis=-1)
         intersection = np.logical_and(output, target).sum(axis=-1)
 
-        zero_indicies = np.where(union == 0)
-        union[zero_indicies] = 1
-        intersection[zero_indicies] = 1
-
         union = union + intersection
         intersection = intersection * 2
 
