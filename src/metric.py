@@ -196,7 +196,7 @@ class IOU_SEG(SegmentationMetric):
         return np.mean(np.divide(intersection, union))
 
     def __repr__(self):
-        return 'IoU' + super(IOU_SEG, self).__repr__()
+        return 'IoU_SEG' + super(IOU_SEG, self).__repr__()
 
 class DICE_SEG(SegmentationMetric):
     
@@ -218,4 +218,4 @@ class DICE_SEG(SegmentationMetric):
         return np.mean(np.divide(intersection, union))
 
     def __repr__(self):
-        return 'DICE' + super(DICE_SEG, self).__repr__()
+        return 'DICE_SEG' + super(DICE_SEG, self).__repr__()
