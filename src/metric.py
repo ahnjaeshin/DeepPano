@@ -178,3 +178,48 @@ class DICE(SegmentationMetric):
 
     def __repr__(self):
         return 'DICE' + super(DICE, self).__repr__()
+
+class IOU_SEG(SegmentationMetric):
+    
+    def __init__(self, threshold = 0.5, mode='both'):
+        super(IOU_SEG, self).__init__(threshold, mode)
+
+    def eval(self, output, target):
+        
+        non_zero_indicies = np.where(target != 0)
+        target = target[non_zero_indicies]
+        output = output[non_zero_indicies]
+        
+        union = np.logical_or(output, target).sum(axis=-1)
+        intersection = np.logical_and(output, target).sum(axis=-1)
+
+        return np.mean(np.divide(intersection, union))
+
+    def __repr__(self):
+        return 'IoU' + super(IOU_SEG, self).__repr__()
+
+class DICE_SEG(SegmentationMetric):
+    
+    def __init__(self, threshold = 0.5, mode='both'):
+        super(DICE_SEG, self).__init__(threshold, mode)
+
+    def eval(self, output, target):
+        
+        non_zero_indicies = np.where(target != 0)
+        target = target[non_zero_indicies]
+        output = output[non_zero_indicies]
+
+        union = np.logical_or(output, target).sum(axis=-1)
+        intersection = np.logical_and(output, target).sum(axis=-1)
+
+        zero_indicies = np.where(union == 0)
+        union[zero_indicies] = 1
+        intersection[zero_indicies] = 1
+
+        union = union + intersection
+        intersection = intersection * 2
+
+        return np.mean(np.divide(intersection, union))
+
+    def __repr__(self):
+        return 'DICE' + super(DICE_SEG, self).__repr__()
