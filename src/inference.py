@@ -122,8 +122,7 @@ class Inference():
             for batch_idx, (input, target, index) in enumerate(dataloaders[turn]):
                 print('inference: {}th'.format(batch_idx))
                 start =  time.time()
-
-                loss, output = self.model.test(input, target)
+                loss, output = self.model(input, target, 'val', reduce=False)
                 inferenceTime = time.time() - start
                 
                 output_image.update(output)
@@ -131,6 +130,7 @@ class Inference():
                 
                 index = list(index.numpy())
                 for i, idx in enumerate(index):
+
                     data = {}
                     o = output[i:i+1]
                     t = target[i:i+1]

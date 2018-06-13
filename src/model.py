@@ -113,7 +113,7 @@ class BasicModule:
 
 class VanillaModel():
     
-    def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False, post=False):
+    def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
         
         self.ensemble = ensemble
 
@@ -139,8 +139,8 @@ class VanillaModel():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __call__(self, input, target, turn):
-        assert set(np.unique(target[0])).issubset({0,1})
+    def __call__(self, input, target, turn, reduce=True):
+        # assert set(np.unique(target[0])).issubset({0,1})
         input, target = cuda(input, self.device), cuda(target, self.device, True)
 
         if turn == 'train':
@@ -148,7 +148,12 @@ class VanillaModel():
         elif turn == 'val':
             loss, output = self.validate(input, target)
 
-        return loss.mean().cpu().item(), cpu(output)
+        if reduce:
+            loss = loss.mean().cpu().item()
+        else:
+            loss = loss.cpu()
+
+        return loss, cpu(output)
 
 
     def train(self, input, target):
@@ -194,7 +199,7 @@ class VanillaModel():
 
         return loss, output
 
-    def test(self, input, target):
+    def test(self, input):
         with torch.no_grad():
             if self.ensemble:
                 output = []
@@ -208,9 +213,8 @@ class VanillaModel():
                 self.module.eval()
                 output = self.module(input)
             output = F.sigmoid(output)
-        loss = self.criterion(output, target)
 
-        return loss, output
+        return output
 
     def step(self, epoch, LOG):
         
@@ -350,7 +354,7 @@ class GANModel():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __call__(self, input, target, turn):
+    def __call__(self, input, target, turn, reduce=True):
         assert set(np.unique(target[0])).issubset({0,1})
         batch_size = input.size(0)
         real_label = cuda(torch.ones((batch_size)), self.device)
@@ -362,7 +366,12 @@ class GANModel():
         elif turn == 'val':
             loss, output = self.validate(input, target, fake_label, real_label)
 
-        return loss.mean().cpu().item(), cpu(output)
+        if reduce:
+            loss = loss.mean().cpu().item()
+        else:
+            loss = loss.cpu()
+
+        return loss, cpu(output)
 
     def train(self, input, target, fake_label, real_label):
         # D: maximize log(D(x,y)) + log(1 - D(x,G(x)))
@@ -425,33 +434,20 @@ class GANModel():
             
         return loss, output
 
-    def test(self, input, target):
-        batch_size = input.size(0)
-        fake_label = torch.zeros(batch_size)
-        real_label = torch.ones(batch_size)
+    def test(self, input):
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
             out = F.tanh(output)
             pred_fake_major = self.D(out[:,0:1,:,:])
             pred_fake_minor = self.D(out[:,1:2,:,:])
-            pred_real_major = self.D(target[:,0:1,:,:])
-            pred_real_minor = self.D(target[:,1:2,:,:])
-
-            D_fake_loss = self.ganLoss(pred_fake_major, fake_label) + self.ganLoss(pred_fake_minor, fake_label)
-            D_real_loss = self.ganLoss(pred_real_major, real_label) + self.ganLoss(pred_real_minor, real_label)
-            D_loss = (D_fake_loss + D_real_loss) / 8
-            G_loss = self.criterion(F.sigmoid(output), target) /2
-            loss = D_loss + G_loss
-
             pred = torch.stack([pred_fake_major, pred_fake_minor], dim=1)
             pred.unsqueeze_(dim=2)
             pred.unsqueeze_(dim=3)
             output = output + pred
-
             output = F.sigmoid(output)
             
-        return loss, output
+        return output
 
     def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]
