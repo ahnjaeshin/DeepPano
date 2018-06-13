@@ -63,6 +63,7 @@ def getLoss(type, param):
         "CE": nn.CrossEntropyLoss,
         "GAN": L.GANLoss,
     })
+    param['reduce'] = False
     return lossParser(type, param)
 
 def getModule(type, param):
@@ -146,7 +147,7 @@ class VanillaModel():
         elif turn == 'val':
             loss, output = self.validate(input, target)
 
-        return loss.cpu().item(), cpu(output)
+        return loss.mean().cpu().item(), cpu(output)
 
 
     def train(self, input, target):
@@ -360,7 +361,7 @@ class GANModel():
         elif turn == 'val':
             loss, output = self.validate(input, target)
 
-        return loss, cpu(output)
+        return loss.mean().cpu().item(), cpu(output)
 
 
     def train(self, input, target, fake_label, real_label):
@@ -393,7 +394,7 @@ class GANModel():
         loss_G.backward()
         self.optimizer_G.step()
 
-        loss = loss_D.cpu().item() + loss_G.cpu().item()
+        loss = loss_D + loss_G
         return loss, F.sigmoid(fake_target_org)
 
     def validate(self, input, target):
@@ -402,7 +403,7 @@ class GANModel():
             output = self.G(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target)
-        return loss.cpu().item(), output
+        return loss, output
 
     def test(self, input, target):
         with torch.no_grad():

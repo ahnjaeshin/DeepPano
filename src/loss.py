@@ -54,7 +54,7 @@ class DICELoss(_WeightedLoss):
             weight = torch.tensor(weight).float()
         super(DICELoss, self).__init__(weight, size_average, reduce)
 
-    def __call__(self, output, target, reduce=True):
+    def __call__(self, output, target):
         batch_size = output.size(0)
         channel = output.size(1)
 
