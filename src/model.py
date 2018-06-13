@@ -409,7 +409,7 @@ class GANModel():
             self.G.eval()
             output = self.G(input)
             output = F.sigmoid(output)
-        loss = self.criterion(output, target)
+        loss = self.criterion(output, target, reduce=False)
         return loss, output
 
     def step(self, epoch, LOG, histo=True):
