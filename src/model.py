@@ -193,7 +193,6 @@ class VanillaModel():
         return loss, output
 
     def test(self, input, target):
-        input, target = cuda(input, self.device), cuda(target, self.device, True)
         with torch.no_grad():
             if self.ensemble:
                 output = []
@@ -209,7 +208,7 @@ class VanillaModel():
             output = F.sigmoid(output)
         loss = self.criterion(output, target, reduce=False)
 
-        return loss.cpu(), cpu(output)
+        return loss, output
 
     def step(self, epoch, LOG):
         
@@ -266,6 +265,23 @@ class VanillaModel():
                 torch.backends.cudnn.benchmark = True
             else:
                 print("CUDA is unavailable")
+
+    def cpu(self):
+        if self.ensemble:
+            if torch.cuda.device_count() > 1:
+                self.module = [(m.module) for m in self.module]
+
+            if torch.cuda.is_available():
+                self.module = [m.cpu() for m in self.module]
+                self.criterion = self.criterion.cpu()
+
+        else:
+            if torch.cuda.device_count() > 1:
+                self.module = self.module.module
+
+            if torch.cuda.is_available():
+                self.module = self.module.cpu()
+                self.criterion = self.criterion.cpu()
 
     def checkpoint(self, epoch, path):
 
@@ -389,13 +405,12 @@ class GANModel():
         return loss.cpu().item(), output
 
     def test(self, input, target):
-        input, target = cuda(input, self.device), cuda(target, self.device, True)
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
             output = F.sigmoid(output)
         loss = self.criterion(output, target)
-        return loss.cpu(), cpu(output)
+        return loss, output
 
     def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]
@@ -450,8 +465,36 @@ class GANModel():
         else:
             print("CUDA is unavailable")
 
+     def cpu(self):
+        if torch.cuda.device_count() > 1:
+            self.G = self.G.module
+            self.D = self.D.module
+
+        if torch.cuda.is_available():
+            self.G = self.G.cpu()
+            self.D = self.D.cpu()
+            self.criterion = self.criterion.cpu()
+            self.ganLoss = self.ganLoss.cpu()
+
     def checkpoint(self, epoch, path):
-        pass
+        
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        filename = "{}{}.pth.tar".format(path, epoch)
+
+        state = {
+            'epoch': epoch,
+        }
+        state_dicts = []
+        G = self.G.module if torch.cuda.device_count() > 1 else self.G
+        D = self.D.module if torch.cuda.device_count() > 1 else self.D
+
+        state['optim_G'] = self.optimizer_G.state_dict()
+        state['optim_D'] = self.optimizer_D.state_dict()
+
+        state['G'] = G.state_dict()
+        state['D'] = D.state_dict()
+
+        torch.save(state, filename)
 
     def load(self, path):
         if os.path.isfile(path):

@@ -93,7 +93,7 @@ def plot_histogram(values, title, path):
 class Inference():
     
     def __init__(self, model, datasets, metrics, visualizations, LOG):
-        self.model = model
+        self.model = model.cpu()
         self.datasets = datasets
         self.LOG = LOG
         self.path = LOG.log_dir_base
