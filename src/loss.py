@@ -98,8 +98,10 @@ class DICEWeightLoss(_WeightedLoss):
         self.pixelwize = nn.BCELoss(size_average=size_average, reduce=reduce)
 
     def __call__(self, output, target):
+        batch_size = output.size(0)
         loss1 = self.DICE(output, target)
         loss2 = self.pixelwize(output, target)
+        loss2 = loss2.view(batch_size, -1).mean(dim=-1)
         return loss1 * self.weight[0] + loss2 * self.weight[1]
 
 class GANLoss(_WeightedLoss):
