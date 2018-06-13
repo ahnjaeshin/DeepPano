@@ -414,7 +414,7 @@ class GANModel():
             D_fake_loss = self.ganLoss(pred_fake_major, fake_label) + self.ganLoss(pred_fake_minor, fake_label)
             D_real_loss = self.ganLoss(pred_real_major, real_label) + self.ganLoss(pred_real_minor, real_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
-            G_loss = self.criterion(output, target) /2
+            G_loss = self.criterion(F.sigmoid(output), target) /2
             loss = D_loss + G_loss
 
             pred = torch.cat([pred_fake_major, pred_fake_minor], dim=1)
@@ -426,20 +426,23 @@ class GANModel():
     def test(self, input, target):
         batch_size = input.size(0)
         fake_label = torch.zeros(batch_size)
+        real_label = torch.ones(batch_size)
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
             out = F.tanh(output)
-            pred_major = self.D(out[:,0:1,:,:])
-            pred_minor = self.D(out[:,1:2,:,:])
+            pred_fake_major = self.D(out[:,0:1,:,:])
+            pred_fake_minor = self.D(out[:,1:2,:,:])
+            pred_real_major = self.D(target[:,0:1,:,:])
+            pred_real_minor = self.D(target[:,1:2,:,:])
 
-            D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
-            D_real_loss = self.ganLoss(target[:,0:1,:,:], fake_label) + self.ganLoss(target[:,1:2,:,:], fake_label)
+            D_fake_loss = self.ganLoss(pred_fake_major, fake_label) + self.ganLoss(pred_fake_minor, fake_label)
+            D_real_loss = self.ganLoss(pred_real_major, real_label) + self.ganLoss(pred_real_minor, real_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
-            G_loss = self.criterion(output, target) /2
+            G_loss = self.criterion(F.sigmoid(output), target) /2
             loss = D_loss + G_loss
 
-            pred = torch.cat([pred_major, pred_minor], dim=1)
+            pred = torch.cat([pred_fake_major, pred_fake_minor], dim=1)
             output = output + pred
             output = F.sigmoid(output)
             
