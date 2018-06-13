@@ -124,19 +124,17 @@ class Inference():
 
                 loss, output = self.model.test(input, target)
                 inferenceTime = time.time() - start
-
-                index = index.item()
-                losses[index] = loss.item()
                 
                 output_image.update(output)
                 target_image.update(target)
-
                 
                 index = list(index.numpy())
                 for i, idx in enumerate(index):
                     data = {}
                     o = output[i:i+1]
                     t = target[i:i+1]
+                    l = loss[i:i+1].item()
+                    losses[idx] = l
                     data['all_img_path'] = self.datasets[turn].getAllImgPath(idx)
                     data['loss'] = loss.item()
                     for metric, result in zip(self.metrics, metric_results):
