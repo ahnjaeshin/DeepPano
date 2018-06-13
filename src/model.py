@@ -465,7 +465,7 @@ class GANModel():
         else:
             print("CUDA is unavailable")
 
-     def cpu(self):
+    def cpu(self):
         if torch.cuda.device_count() > 1:
             self.G = self.G.module
             self.D = self.D.module
