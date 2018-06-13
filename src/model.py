@@ -345,8 +345,8 @@ class GANModel():
         self.scheduler_G = getScheduler(**scheduler, optimizer=self.optimizer_G)
         self.scheduler_D = getScheduler(**scheduler, optimizer=self.optimizer_D)
 
-        self.criterion = getLoss(**loss, reduce=False)
-        self.ganLoss = L.GANLoss(lsgan=True, reduce=False)
+        self.criterion = getLoss(**loss)
+        self.ganLoss = L.GANLoss(lsgan=True)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -417,7 +417,7 @@ class GANModel():
             G_loss = self.criterion(output, target) /2
             loss = D_loss + G_loss
 
-            pred = torch.cat([pred_major, pred_minor], dim=1)
+            pred = torch.cat([pred_fake_major, pred_fake_minor], dim=1)
             output = output + pred
             output = F.sigmoid(output)
             
