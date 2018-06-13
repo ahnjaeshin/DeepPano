@@ -417,7 +417,7 @@ class GANModel():
             G_loss = self.criterion(F.sigmoid(output), target) /2
             loss = D_loss + G_loss
 
-            pred = torch.cat([pred_fake_major, pred_fake_minor], dim=1)
+            pred = torch.stack([pred_fake_major, pred_fake_minor], dim=1)
             output = output + pred
             output = F.sigmoid(output)
             
@@ -442,7 +442,7 @@ class GANModel():
             G_loss = self.criterion(F.sigmoid(output), target) /2
             loss = D_loss + G_loss
 
-            pred = torch.cat([pred_fake_major, pred_fake_minor], dim=1)
+            pred = torch.stack([pred_fake_major, pred_fake_minor], dim=1)
             output = output + pred
             output = F.sigmoid(output)
             
