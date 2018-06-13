@@ -79,7 +79,6 @@ def main(experiment, logging, augmentation, dataset, model, metric, training):
         LOG.finish()
         print('abrupt end, {}'.format(e))
         print(traceback.format_exc())
-        exit(0)
 
     infer = Inference(
         model=MODEL,

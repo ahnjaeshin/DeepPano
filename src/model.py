@@ -345,8 +345,8 @@ class GANModel():
         self.scheduler_G = getScheduler(**scheduler, optimizer=self.optimizer_G)
         self.scheduler_D = getScheduler(**scheduler, optimizer=self.optimizer_D)
 
-        self.criterion = getLoss(**loss)
-        self.ganLoss = L.GANLoss(lsgan=True)
+        self.criterion = getLoss(**loss, reduce=False)
+        self.ganLoss = L.GANLoss(lsgan=True, reduce=False)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -406,11 +406,13 @@ class GANModel():
             self.G.eval()
             output = self.G(input)
             out = F.tanh(output)
-            pred_major = self.D(out[:,0:1,:,:])
-            pred_minor = self.D(out[:,1:2,:,:])
+            pred_fake_major = self.D(out[:,0:1,:,:])
+            pred_fake_minor = self.D(out[:,1:2,:,:])
+            pred_real_major = self.D(target[:,0:1,:,:])
+            pred_real_minor = self.D(target[:,1:2,:,:])
 
-            D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
-            D_real_loss = self.ganLoss(target[:,0:1,:,:], fake_label) + self.ganLoss(target[:,1:2,:,:], fake_label)
+            D_fake_loss = self.ganLoss(pred_fake_major, fake_label) + self.ganLoss(pred_fake_minor, fake_label)
+            D_real_loss = self.ganLoss(pred_real_major, real_label) + self.ganLoss(pred_real_minor, real_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
             G_loss = self.criterion(output, target) /2
             loss = D_loss + G_loss
