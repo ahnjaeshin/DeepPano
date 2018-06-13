@@ -372,16 +372,14 @@ class GANModel():
         real_pair = target
         real_pred_major = self.D(real_pair[:,0,:,:])
         real_pred_minor = self.D(real_pair[:,1,:,:])
-        real_D_loss = self.ganLoss(real_pred_major, real_label) +
-                      self.ganLoss(real_pred_minor, real_label)
+        real_D_loss = self.ganLoss(real_pred_major, real_label) + self.ganLoss(real_pred_minor, real_label)
         ## Fake
         output_org = self.G(input)
         output = F.tanh(output_org)
         fake_pair = output.detach()
         fake_pred_major = self.D(fake_pair[:,0,:,:])
         fake_pred_minor = self.D(fake_pair[:,1,:,:])
-        fake_D_loss = self.ganLoss(fake_pred_major, fake_label) +
-                      self.ganLoss(fake_pred_minor, fake_label)
+        fake_D_loss = self.ganLoss(fake_pred_major, fake_label) + self.ganLoss(fake_pred_minor, fake_label)
 
         self.optimizer_D.zero_grad()
         loss_D = real_D_loss * 0.5 + fake_D_loss * 0.5
@@ -392,8 +390,7 @@ class GANModel():
         fake_pair = output
         fake_pred_major = self.D(fake_pair[:,0,:,:])
         fake_pred_minor = self.D(fake_pair[:,1,:,:])
-        fake_G_loss = self.ganLoss(fake_pred_major, fake_label) +
-                      self.ganLoss(fake_pred_minor, fake_label)
+        fake_G_loss = self.ganLoss(fake_pred_major, fake_label) + self.ganLoss(fake_pred_minor, fake_label)
 
         seg_loss = self.criterion(F.sigmoid(output_org), target) * 10
         self.optimizer_G.zero_grad()
@@ -412,10 +409,8 @@ class GANModel():
             pred_major = self.D(out[:,0,:,:])
             pred_minor = self.D(out[:,0,:,:])
 
-            D_fake_loss = self.ganLoss(pred_major, fake_label) +
-                          self.ganLoss(pred_minor, fake_label)
-            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) +
-                          self.ganLoss(target[:,1,:,:], fake_label)
+            D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
+            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) + self.ganLoss(target[:,1,:,:], fake_label)
             D_loss = (D_fake_loss + D_real_loss) / 8
             G_loss = self.criterion(output, target) /2
             loss = D_loss + G_loss
