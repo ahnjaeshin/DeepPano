@@ -190,13 +190,14 @@ class IOU_SEG(SegmentationMetric):
         
         # batch_size, -1
 
-        non_zero_indicies = np.where(target.sum(axis=-1) != 0)
+        non_zero_indicies = np.where(target.any(axis=-1))
         
         union = np.logical_or(output, target).sum(axis=-1)
         intersection = np.logical_and(output, target).sum(axis=-1)
 
-        union = union[non_zero_indicies]
-        intersection = intersection[non_zero_indicies]
+        if len(non_zero_indicies) != 0:
+            union = union[non_zero_indicies]
+            intersection = intersection[non_zero_indicies]
 
         return np.mean(np.divide(intersection, union))
 
@@ -210,15 +211,16 @@ class DICE_SEG(SegmentationMetric):
 
     def eval(self, output, target):
         
-        non_zero_indicies = np.where(target.sum(axis=-1) != 0)
+        non_zero_indicies = np.where(target.any(axis=-1))
         target = target[non_zero_indicies]
         output = output[non_zero_indicies]
 
         union = np.logical_or(output, target).sum(axis=-1) + 1
         intersection = np.logical_and(output, target).sum(axis=-1)
 
-        union = union[non_zero_indicies]
-        intersection = intersection[non_zero_indicies]
+        if len(non_zero_indicies) != 0:
+            union = union[non_zero_indicies]
+            intersection = intersection[non_zero_indicies]
 
         union = union + intersection
         intersection = intersection * 2

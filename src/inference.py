@@ -101,8 +101,8 @@ class Inference():
         self.metrics = metrics
         self.visualizations = visualizations
 
-    def __call__(self, k=5):
-        dataloaders = { x: DataLoader(dataset=self.datasets[x]) 
+    def __call__(self, batch_size=20):
+        dataloaders = { x: DataLoader(dataset=self.datasets[x], batch_size=batch_size=) 
                 for x in ['train', 'val']}
 
         for turn in ['train', 'val']:
@@ -118,7 +118,8 @@ class Inference():
 
         # forward    
         with torch.no_grad():
-            for input, target, index in dataloaders[turn]:
+            for batch_idx, (input, target, index) in enumerate(dataloaders[turn]):
+                print('inference: {}th'.format(batch_idx))
                 start =  time.time()
 
                 loss, output = self.model.test(input, target)
@@ -130,25 +131,30 @@ class Inference():
                 output_image.update(output)
                 target_image.update(target)
 
-                data = {}
-                data['all_img_path'] = self.datasets[turn].getAllImgPath(index)
-                data['loss'] = loss.item()
-                for metric, result in zip(self.metrics, metric_results):
-                    name = repr(metric).replace('/', '_')
-                    m = metric(output, target)
-                    result[index] = m
-                    data[name] = m
+                
+                index = list(index.numpy())
+                for i, idx in enumerate(index):
+                    data = {}
+                    o = output[i:i+1]
+                    t = target[i:i+1]
+                    data['all_img_path'] = self.datasets[turn].getAllImgPath(idx)
+                    data['loss'] = loss.item()
+                    for metric, result in zip(self.metrics, metric_results):
+                        name = repr(metric).replace('/', '_')
+                        m = metric(o, t)
+                        result[idx] = m
+                        data[name] = m
 
-                data['inferenceTime'] = inferenceTime
+                    data['inferenceTime'] = inferenceTime
 
-                self.save_sample(data, output, target, 0.8)
-                self.save_sample(data, output, target, 0.5)
-                self.save_sample(data, output, target, 0.3)
-                self.save_sample(data, output, target, 0.1)
-                self.save_sample(data, output, target, 0.02)
-                self.save_sample(data, output, target, 0.01)
+                    self.save_sample(data, o, t, 0.8)
+                    self.save_sample(data, o, t, 0.5)
+                    self.save_sample(data, o, t, 0.3)
+                    self.save_sample(data, o, t, 0.1)
+                    self.save_sample(data, o, t, 0.02)
+                    self.save_sample(data, o, t, 0.01)
 
-                samples.append(data)
+                    samples.append(data)
 
         # histogram of losses
         plot_histogram(list(losses.values()), 'loss', '{}{}/loss.png'.format(self.path, turn))
