@@ -360,7 +360,7 @@ class GANModel():
         if turn == 'train':
             loss, output = self.train(input, target, fake_label, real_label)
         elif turn == 'val':
-            loss, output = self.validate(input, target)
+            loss, output = self.validate(input, target, fake_label, real_label)
 
         return loss.mean().cpu().item(), cpu(output)
 
@@ -401,7 +401,7 @@ class GANModel():
         loss = loss_D + loss_G
         return loss, F.sigmoid(fake_target_org)
 
-    def validate(self, input, target):
+    def validate(self, input, target, fake_label, real_label):
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
@@ -422,7 +422,26 @@ class GANModel():
         return loss, output
 
     def test(self, input, target):
-        self.validate(input, target)
+        batch_size = input.size(0)
+        fake_label = torch.zeros(batch_size)
+        with torch.no_grad():
+            self.G.eval()
+            output = self.G(input)
+            out = F.tanh(output)
+            pred_major = self.D(out[:,0,:,:])
+            pred_minor = self.D(out[:,0,:,:])
+
+            D_fake_loss = self.ganLoss(pred_major, fake_label) + self.ganLoss(pred_minor, fake_label)
+            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) + self.ganLoss(target[:,1,:,:], fake_label)
+            D_loss = (D_fake_loss + D_real_loss) / 8
+            G_loss = self.criterion(output, target) /2
+            loss = D_loss + G_loss
+
+            pred = torch.cat([pred_major, pred_minor], dim=1)
+            output = output + pred
+            output = F.sigmoid(output)
+            
+        return loss, output
 
     def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]
