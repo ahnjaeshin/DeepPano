@@ -149,9 +149,10 @@ class Threshold():
 
 class Cutout():
 
-    def __init__(self, size=12, p=0.5):
+    def __init__(self, size=48, p=0.5, bound=False):
         self.size = size
         self.p = p
+        self.bound = bound
 
     def __call__(self, img, target_major, target_minor):
         if random.random() > self.p:
@@ -162,13 +163,17 @@ class Cutout():
         h, w = img.shape
         pad = (self.size // 2)
 
-        for i in range(1000):
+        if self.bound:
+            for i in range(1000):
+                x, y = random.randrange(pad, h - pad), random.randrange(pad, w - pad)
+                roi_major = t_major_guide[x-pad:x+pad, y-pad:y+pad]
+                roi_minor = t_minor_guide[x-pad:x+pad, y-pad:y+pad]
+                if np.all(roi_major != 0) or np.all(roi_minor != 0):
+                    img[x-pad:x+pad, y-pad:y+pad] = 0
+                    break
+        else:
             x, y = random.randrange(pad, h - pad), random.randrange(pad, w - pad)
-            roi_major = t_major_guide[x-pad:x+pad, y-pad:y+pad]
-            roi_minor = t_minor_guide[x-pad:x+pad, y-pad:y+pad]
-            if np.all(roi_major != 0) or np.all(roi_minor != 0):
-                img[x-pad:x+pad, y-pad:y+pad] = 0
-                break
+            img[x-pad:x+pad, y-pad:y+pad] = 0
 
         img = Image.fromarray(img)
         return img, target_major, target_minor
