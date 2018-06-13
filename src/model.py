@@ -313,6 +313,9 @@ class VanillaModel():
 
         torch.save(state, filename)
 
+    def restore(self, path):
+        return self.load(path)
+
     def load(self, path):
         if os.path.isfile(path):
             print("=> loading checkpoint '{}'".format(path))
@@ -408,7 +411,14 @@ class GANModel():
         self.optimizer_G.step()
 
         loss = loss_D + loss_G
-        return loss, F.sigmoid(output_org)
+
+        pred = torch.stack([fake_pred_major, fake_pred_minor], dim=1)
+        pred.unsqueeze_(dim=2)
+        pred.unsqueeze_(dim=3)
+        output = output_org + pred
+        output = F.sigmoid(output)
+
+        return loss, output
 
     def validate(self, input, target, fake_label, real_label):
         with torch.no_grad():
@@ -521,7 +531,6 @@ class GANModel():
         state = {
             'epoch': epoch,
         }
-        state_dicts = []
         G = self.G.module if torch.cuda.device_count() > 1 else self.G
         D = self.D.module if torch.cuda.device_count() > 1 else self.D
 
@@ -532,6 +541,23 @@ class GANModel():
         state['D'] = D.state_dict()
 
         torch.save(state, filename)
+
+    def restore(self, path):
+        if os.path.isfile(path):
+            print("=> loading model '{}'".format(path))
+
+            checkpoint = torch.load(path)
+            epoch = checkpoint['epoch'] + 1
+            self.G.load_state_dict(checkpoint['G'])
+            self.D.load_state_dict(checkpoint['D'])
+            self.optimizer_G.load_state_dict(checkpoint['optim_G'])
+            self.optimizer_D.load_state_dict(checkpoint['optim_D'])
+
+            print("=> loaded model '{}' (epoch {})".format(path, epoch))
+        else:
+            epoch = 0
+            print("=> no model found at '{}'".format(path))
+        return epoch
 
     def load(self, path):
         if os.path.isfile(path):
@@ -545,7 +571,6 @@ class GANModel():
         else:
             epoch = 0
             print("=> no checkpoint found at '{}'".format(path))
-
         return 0
 
 class RecurModel():
