@@ -2,6 +2,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+https://github.com/kuangliu/pytorch-groupnorm/
+"""
+
+class GroupNorm(nn.Module):
+    def __init__(self, num_features, num_groups=32, eps=1e-5):
+        super(GroupNorm, self).__init__()
+        self.weight = nn.Parameter(torch.ones(1,num_features,1,1))
+        self.bias = nn.Parameter(torch.zeros(1,num_features,1,1))
+        self.num_groups = num_groups
+        self.eps = eps
+
+    def forward(self, x):
+        N, C, H, W = x.size()
+        G = self.num_groups
+        assert C % G == 0
+
+        x = x.view(N, G, -1)
+        mean = x.mean(-1, keepdim=True)
+        var = x.var(-1, keepdim=True)
+
+        x = (x-mean) / (var+self.eps).sqrt()
+        x = x.view(N,C,H,W)
+        x = x * self.weight + self.bias
+        return x
+
+
 class SepConv_3(nn.Sequential):
     def __init__(self, in_channel, out_channel):
         super().__init__()
@@ -42,17 +69,18 @@ class ConvBlock(nn.Module):
     """
     def __init__(self, in_channel, out_channel, se=False):
         super(ConvBlock, self).__init__()
+        group = max(out_channel // 4, 1)
         self.conv1 = conv_3(in_channel, out_channel)
-        self.bn1 = nn.BatchNorm2d(out_channel)
+        self.bn1 = GroupNorm(out_channel, num_groups=group)
         self.lrelu1 = nn.LeakyReLU(inplace=True)
         self.conv2 = conv_3(out_channel, out_channel)
-        self.bn2 = nn.BatchNorm2d(out_channel)
+        self.bn2 = GroupNorm(out_channel, num_groups=group)
         self.lrelu2 = nn.LeakyReLU(inplace=True)
         self.do_se = se
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=1, bias=False),
-            nn.BatchNorm2d(out_channel)
+            GroupNorm(out_channel, num_groups=group)
         )
         self.se = SELayer(out_channel)
 

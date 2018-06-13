@@ -307,7 +307,7 @@ class Logger:
 
     def add_model(self, title, model, input_size):
         dummy_input = torch.rand(1, *input_size)
-        self.writers['train'].add_graph(model, (dummy_input, ))
+        # self.writers['train'].add_graph(model, (dummy_input, ))
         model_sum, trainable_param = model_summary(model, input_size=input_size)
         self.writers['train'].add_scalar('number of parameter/w_input', count_parameters(model))
         self.writers['train'].add_scalar('number of parameter/wo_input', trainable_param)
