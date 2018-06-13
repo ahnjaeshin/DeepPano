@@ -207,7 +207,7 @@ class VanillaModel():
                 self.module.eval()
                 output = self.module(input)
             output = F.sigmoid(output)
-        loss = self.criterion(output, target, reduce=False)
+        loss = self.criterion(output, target)
 
         return loss, output
 
@@ -410,7 +410,7 @@ class GANModel():
             self.G.eval()
             output = self.G(input)
             output = F.sigmoid(output)
-        loss = self.criterion(output, target, reduce=False)
+        loss = self.criterion(output, target)
         return loss, output
 
     def step(self, epoch, LOG, histo=True):
@@ -570,7 +570,7 @@ class RecurModel():
             self.module.eval()
             output = self.module(input)
             output = F.sigmoid(output)
-        loss = self.criterion(output, target, reduce=False)
+        loss = self.criterion(output, target)
 
         return loss, output
 
