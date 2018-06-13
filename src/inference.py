@@ -102,7 +102,7 @@ class Inference():
         self.visualizations = visualizations
 
     def __call__(self, batch_size=20):
-        dataloaders = { x: DataLoader(dataset=self.datasets[x], batch_size=batch_size=) 
+        dataloaders = { x: DataLoader(dataset=self.datasets[x], batch_size=batch_size) 
                 for x in ['train', 'val']}
 
         for turn in ['train', 'val']:
