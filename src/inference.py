@@ -136,7 +136,7 @@ class Inference():
                     l = loss[i:i+1]
                     losses[idx] = l.item()
                     data['all_img_path'] = self.datasets[turn].getAllImgPath(idx)
-                    data['loss'] = loss.item()
+                    data['loss'] = l.item()
                     for metric, result in zip(self.metrics, metric_results):
                         name = repr(metric).replace('/', '_')
                         m = metric(o, t)
