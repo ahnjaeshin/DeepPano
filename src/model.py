@@ -370,15 +370,15 @@ class GANModel():
         self.D.train()
         ## Real
         real_pair = target
-        real_pred_major = self.D(real_pair[:,0,:,:])
-        real_pred_minor = self.D(real_pair[:,1,:,:])
+        real_pred_major = self.D(real_pair[:,0:1,:,:])
+        real_pred_minor = self.D(real_pair[:,1:2,:,:])
         real_D_loss = self.ganLoss(real_pred_major, real_label) + self.ganLoss(real_pred_minor, real_label)
         ## Fake
         output_org = self.G(input)
         output = F.tanh(output_org)
         fake_pair = output.detach()
-        fake_pred_major = self.D(fake_pair[:,0,:,:])
-        fake_pred_minor = self.D(fake_pair[:,1,:,:])
+        fake_pred_major = self.D(fake_pair[:,0:1,:,:])
+        fake_pred_minor = self.D(fake_pair[:,1:2,:,:])
         fake_D_loss = self.ganLoss(fake_pred_major, fake_label) + self.ganLoss(fake_pred_minor, fake_label)
 
         self.optimizer_D.zero_grad()
@@ -388,8 +388,8 @@ class GANModel():
 
         # G: maximize log(D(x,G(x))) + DICE(y,G(x))
         fake_pair = output
-        fake_pred_major = self.D(fake_pair[:,0,:,:])
-        fake_pred_minor = self.D(fake_pair[:,1,:,:])
+        fake_pred_major = self.D(fake_pair[:,0:1,:,:])
+        fake_pred_minor = self.D(fake_pair[:,1:2,:,:])
         fake_G_loss = self.ganLoss(fake_pred_major, fake_label) + self.ganLoss(fake_pred_minor, fake_label)
 
         seg_loss = self.criterion(F.sigmoid(output_org), target) * 10
@@ -399,7 +399,7 @@ class GANModel():
         self.optimizer_G.step()
 
         loss = loss_D + loss_G
-        return loss, F.sigmoid(fake_target_org)
+        return loss, F.sigmoid(output_org)
 
     def validate(self, input, target, fake_label, real_label):
         with torch.no_grad():
