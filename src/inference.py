@@ -80,6 +80,7 @@ def plot_histogram(values, title, path):
 
     # the histogram of the data
     fig = plt.figure()
+    values = [x for x in values if str(x) != 'nan']
     plt.hist(values, 50, facecolor='green', alpha=0.75)
 
     plt.ylabel('Samples')
@@ -101,7 +102,7 @@ class Inference():
         self.metrics = metrics
         self.visualizations = visualizations
 
-    def __call__(self, batch_size=20):
+    def __call__(self, batch_size=30):
         dataloaders = { x: DataLoader(dataset=self.datasets[x], batch_size=batch_size) 
                 for x in ['train', 'val']}
 

@@ -86,6 +86,21 @@ class DICELoss(_WeightedLoss):
         else:
             return loss.sum()
 
+class DICEWeightLoss(_WeightedLoss):
+    """ 1 - F1 score
+    """
+
+    def __init__(self, weight=None, size_average=True, reduce=True):
+        if weight is not None:
+            weight = torch.tensor(weight).float()
+        self.DICE = DICELoss(size_average=size_average, reduce=reduce)
+        self.pixelwize = nn.BCELoss(size_average=size_average, reduce=reduce)
+        super(DICEWeightLoss, self).__init__(weight, size_average, reduce)
+
+    def __call__(self, output, target):
+        loss1 = self.DICE(output, target)
+        loss2 = self.pixelwize(output, target)
+        return loss1 * self.weight[0] + loss2 * self.weight[1]
 
 class GANLoss(_WeightedLoss):
     

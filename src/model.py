@@ -62,6 +62,7 @@ def getLoss(type, param):
         "DICE": L.DICELoss,
         "CE": nn.CrossEntropyLoss,
         "GAN": L.GANLoss,
+        "WDICE": L.DICEWeightLoss,
     })
     param['reduce'] = False
     return lossParser(type, param)
@@ -168,7 +169,7 @@ class VanillaModel():
 
         loss = self.criterion(output, target)
         self.optimizer.zero_grad()   
-        loss.backward()         
+        loss.sum().backward()         
         self.optimizer.step()
 
         return loss, output
@@ -332,7 +333,7 @@ class GANModel():
 
     def __init__(self, module, weight_init, optimizer, scheduler, loss, ensemble=False):
         self.G = getGANModule(**module)
-        self.D = unet.SimpleClassify(4, 1, 4)
+        self.D = unet.SimpleClassify(1, 1, module["param"]["unit"])
         if init:
             init_func = Init(init)
             self.G.apply(init_func)
@@ -363,35 +364,41 @@ class GANModel():
 
         return loss.mean().cpu().item(), cpu(output)
 
-
     def train(self, input, target, fake_label, real_label):
         # D: maximize log(D(x,y)) + log(1 - D(x,G(x)))
         self.G.train()
         self.D.train()
         ## Real
-        real_pair = torch.cat([input, target], dim=1)
-        real_pred = self.D(real_pair)
-        real_D_loss = self.ganLoss(real_pred, real_label)
+        real_pair = target
+        real_pred_major = self.D(real_pair[:,0,:,:])
+        real_pred_minor = self.D(real_pair[:,1,:,:])
+        real_D_loss = self.ganLoss(real_pred_major, real_label) +
+                      self.ganLoss(real_pred_minor, real_label)
         ## Fake
-        fake_target_org = self.G(input)
-        fake_target = F.tanh(fake_target_org)
-        fake_pair = torch.cat([input, fake_target], dim=1)
-        fake_pred = self.D(fake_pair.detach())
-        fake_D_loss = self.ganLoss(fake_pred, fake_label)
+        output_org = self.G(input)
+        output = F.tanh(output_org)
+        fake_pair = output.detach()
+        fake_pred_major = self.D(fake_pair[:,0,:,:])
+        fake_pred_minor = self.D(fake_pair[:,1,:,:])
+        fake_D_loss = self.ganLoss(fake_pred_major, fake_label) +
+                      self.ganLoss(fake_pred_minor, fake_label)
 
         self.optimizer_D.zero_grad()
         loss_D = real_D_loss * 0.5 + fake_D_loss * 0.5
-        loss_D.backward()
+        loss_D.sum().backward()
         self.optimizer_D.step()
 
         # G: maximize log(D(x,G(x))) + DICE(y,G(x))
-        fake_pair = torch.cat([input, fake_target], dim=1)
-        fake_pred = self.D(fake_pair)
-        fake_G_loss = self.ganLoss(fake_pred, fake_label)
-        seg_loss = self.criterion(F.sigmoid(fake_target_org), target) * 10
+        fake_pair = output
+        fake_pred_major = self.D(fake_pair[:,0,:,:])
+        fake_pred_minor = self.D(fake_pair[:,1,:,:])
+        fake_G_loss = self.ganLoss(fake_pred_major, fake_label) +
+                      self.ganLoss(fake_pred_minor, fake_label)
+
+        seg_loss = self.criterion(F.sigmoid(output_org), target) * 10
         self.optimizer_G.zero_grad()
-        loss_G = fake_G_loss + seg_loss
-        loss_G.backward()
+        loss_G = (fake_G_loss + seg_loss) / 2
+        loss_G.sum().backward()
         self.optimizer_G.step()
 
         loss = loss_D + loss_G
@@ -401,17 +408,26 @@ class GANModel():
         with torch.no_grad():
             self.G.eval()
             output = self.G(input)
+            out = F.tanh(output)
+            pred_major = self.D(out[:,0,:,:])
+            pred_minor = self.D(out[:,0,:,:])
+
+            D_fake_loss = self.ganLoss(pred_major, fake_label) +
+                          self.ganLoss(pred_minor, fake_label)
+            D_real_loss = self.ganLoss(target[:,0,:,:], fake_label) +
+                          self.ganLoss(target[:,1,:,:], fake_label)
+            D_loss = (D_fake_loss + D_real_loss) / 8
+            G_loss = self.criterion(output, target) /2
+            loss = D_loss + G_loss
+
+            pred = torch.cat([pred_major, pred_minor], dim=1)
+            output = output + pred
             output = F.sigmoid(output)
-        loss = self.criterion(output, target)
+            
         return loss, output
 
     def test(self, input, target):
-        with torch.no_grad():
-            self.G.eval()
-            output = self.G(input)
-            output = F.sigmoid(output)
-        loss = self.criterion(output, target)
-        return loss, output
+        self.validate(input, target)
 
     def step(self, epoch, LOG, histo=True):
         lr_G = [group['lr'] for group in self.optimizer_G.param_groups][0]

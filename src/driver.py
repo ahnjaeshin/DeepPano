@@ -61,8 +61,6 @@ def main(experiment, logging, augmentation, dataset, model, metric, training):
         "DICE": M.DICE,
         "accuracy": M.Accuracy,
         "f1": M.F1,
-        "IOU_SEG": M.IOU_SEG,
-        "DICE_SEG": M.DICE_SEG,
     })
     metrics = [metricParser(**m) for m in metric]
 
