@@ -13,17 +13,15 @@ from torch.autograd import Variable
 import pandas as pd
 import re
 import sys
-
-#parser = argparse.ArgumentParser(description=__doc__)
-#parser.add_argument("--modelPath", type=str, required=True, help="path to model checkpoint")
-#parser.add_argument("--model", type=str, required=True, help="path to model checkpoint")
-#parser.add_argument("--dataCsv", type=str, required=True, help="path to model checkpoint")
+import json
 
 class PanoWithOutputImgs():
+
     def __init__(self, path):
-        self.thresList = [0.3, 0.5, 0.8, 0.9]
-        self.imgTypeList = ['MajorOnly', 'MinorSameCol', 'MinorGray']
-        self.imgDictArray = [[{} for i in range(1, len(self.imgTypeList))] for i in range(1, len(self.thresList))]
+        self.thresList = [0.1, 0.15, 0.2, 0.3, 0.5, 0.8]
+        self.imgTypeList = ['OneBlobMajorOnly', 'OneBlobMinorSameCol']
+        self.imgTypeList += ['NoBlobMajorOnly', 'NoBlobMinorSameCol']
+        self.imgDictArray = [[{} for i in range(len(self.imgTypeList))] for i in range(len(self.thresList))]
 
         self.path = path
         self.teethColor = [(0,0,255), (0,127,255), (0,255,255), (0,255,0), (255,255,0), (255,0,0),
@@ -32,8 +30,11 @@ class PanoWithOutputImgs():
         patternImg = cv2.imread('../data/fillpattern.jpg', cv2.IMREAD_GRAYSCALE)
         ret, patternThres = cv2.threshold(patternImg, 150, 255, cv2.THRESH_BINARY)
         self.patternMask = cv2.bitwise_not(patternThres)
- 
+
+
     def getImg(self, fileName, thres, imgType):
+        print('thres: {}, imgType: {}'.format(thres, imgType))
+        print('thresindex: {}, imgTypeindex: {}'.format(self.thresList.index(thres), self.imgTypeList.index(imgType)))
         imgDict = self.imgDictArray[self.thresList.index(thres)][self.imgTypeList.index(imgType)]
         if fileName in imgDict:
             return imgDict[fileName]
@@ -42,12 +43,14 @@ class PanoWithOutputImgs():
             imgDict[fileName] = panoImg
             return panoImg
 
+
     def updateImg(self, fileName, majorImg, minorImg, toothNum, leftUpmostCoord):
 
         for thres in self.thresList:
-            _updateImg(fileName, majorImg, minorImg, toothNum, leftUpmostCoord, thres)
+            self._updateImg(fileName, majorImg, minorImg, toothNum, leftUpmostCoord, thres)
 
         return
+
 
     def _updateImg(self, fileName, majorImg, minorImg, toothNum, leftUpmostCoord, thres):
         
@@ -55,13 +58,19 @@ class PanoWithOutputImgs():
 
         thresMajorImg = (majorImg > thres).astype(int) * 255
         thresMinorImg = (minorImg > thres).astype(int) * 255
-
+        print('thresMajorImg: {}, thresMinorImg: {}'.format(np.unique(thresMajorImg), np.unique(thresMinorImg)))
         for imgType in self.imgTypeList:
             panoImg = self.getImg(fileName, thres, imgType)
-            coloredMajorImg, coloredMinorImg = self.oneBlobAndColorImg(majorImg, minorImg, toothNum, imgType)
-            updatedPanoImg = self.addImg(panoImg, coloredMajorImg, leftUpmostCoord)
-            updatedPanoImg = self.addImg(updatedPanoImg, coloredMinorImg, leftUpmostCoord)
-            __updateImg(fileName, updatedPanoImg, thres, imgType)
+
+            coloredMajorImg, coloredMinorImg = self.oneBlobAndColorImg(thresMajorImg, thresMinorImg, toothNum, imgType)
+
+            updatedPanoImg = panoImg.copy()
+            if not (coloredMajorImg is None):
+                updatedPanoImg = self.addImg(panoImg, coloredMajorImg, leftUpmostCoord)
+            if not (coloredMinorImg is None):
+                updatedPanoImg = self.addImg(updatedPanoImg, coloredMinorImg, leftUpmostCoord)
+            self.__updateImg(fileName, updatedPanoImg, thres, imgType)
+
 
     def __updateImg(self, fileName, result, thres, imgType):
         imgDict = self.imgDictArray[self.thresList.index(thres)][self.imgTypeList.index(imgType)]
@@ -71,36 +80,62 @@ class PanoWithOutputImgs():
         else:
             return 1
 
+
     def getColor(self, toothNum):
-        return self.teethColor[(toothNum % 10 - 1)] # TODO: change it
+        return self.teethColor[(toothNum % 10 - 1)]
+
 
     def oneBlobAndColorImg(self, majorImg, minorImg, toothNum, imgType):
 
         color = self.getColor(toothNum)
 
-        majorOutput = _oneBlobAndColorImg(majorImg, color)[0]
-        if imgType == 'MajorOnly':
+        if imgType == 'OneBlobMajorOnly':
+            majorOutput = self._oneBlobAndColorImg(majorImg, color)[0]
             return (majorOutput, None)
-        elif imgType == 'MinorSameCol':
-            return (majorOutput, _oneBlobAndColorImg(minorImg, color)[1])
-        elif imgType == 'MinorGray':
-            return (majotOutput, _oneBlobAndColorImg(minorImg, (150, 150, 150))[1])
+        elif imgType == 'OneBlobMinorSameCol':
+            majorOutput = self._oneBlobAndColorImg(majorImg, color)[0]
+            return (majorOutput, self._oneBlobAndColorImg(minorImg, color)[1])
+        elif imgType == 'NoBlobMajorOnly':
+            majorOutput = self._noBlobAndColorImg(majorImg, color)[0]
+            return (majorOutput, None)
+        elif imgType == 'NoBlobMinorSameCol':
+            majorOutput = self._noBlobAndColorImg(majorImg, color)[0]
+            return (majorOutput, self._noBlobAndColorImg(minorImg, color)[0]) 
         else:
             return (None, None)
- 
 
-    def _oneBlobAndColorImgMajor(self, img, color):
+
+    def _noBlobAndColorImg(self, img, color):
+
+        h, w = img.shape[:2]
+        imgFrame = np.zeros((h, w), np.uint8)
+        imgFrame[0:h, 0:w] = img
+        th, imgTh = cv2.threshold(imgFrame, 200, 255, cv2.THRESH_BINARY_INV)
+        maskInv = cv2.bitwise_not(imgTh)
+        result = np.zeros((h, w, 3), np.uint8)
+        cv2.rectangle(result, (0, 0), (w, h), color, -1)
+        result = cv2.bitwise_and(result, result, mask=maskInv)
+
+        return (result, None)
+
+ 
+    def _oneBlobAndColorImg(self, img, color):
 
         # Assume img in grayscale, threshold applied
         h, w = img.shape[:2]
         imgDraw = np.zeros((h+2, w+2, 3), np.uint8) # img to draw contour
         imgFrame = np.zeros((h+2, w+2), np.uint8) # img with padding
         imgFrame[1:(h+1), 1:(w+1)] = img
-
-        #th, imgTh = cv2.threshold(imgFrame, 200, 255, cv2.THRESH_BINARY_INV) # threshold just in case...
+        th, imgTh = cv2.threshold(imgFrame, 200, 255, cv2.THRESH_BINARY_INV) # threshold just in case...
         tempImg, contours, hierarchy = cv2.findContours(imgTh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
         contoursNum = len(contours) - 1 # except the whole img
+
+        if contoursNum < 1:
+            resultImg = imgDraw[1:(h+1), 1:(w+1), 0:3].copy()
+            resultPattern = imgDraw[1:(h+1), 1:(w+1), 0:3].copy()
+            return (resultImg, resultPattern)
+
         maxArea = 0
         maxIndex = -1
 
@@ -113,16 +148,18 @@ class PanoWithOutputImgs():
         maxContour = contours[maxIndex]
         cv2.drawContours(imgDraw, [maxContour], 0, color, cv2.FILLED) # draw filled contour
         cv2.drawContours(imgDraw, [maxContour], 0, (0, 0, 0), 1) # erase contour border line
-
         resultImg = imgDraw[1:(h+1), 1:(w+1), 0:3].copy() # remove padding
-
         patternCrop = self.patternMask[0:(h+2), 0:(w+2)]
-        imgInv = cv2.bitwise_not(img)
+    
+        mask = np.zeros((h+2,w+2), np.uint8)
+        cv2.drawContours(mask, [maxContour], 0, 255, cv2.FILLED)
+        maskInv = cv2.bitwise_not(mask)
+    
         imgPattern = cv2.bitwise_and(imgDraw, imgDraw, mask = patternCrop)
         cv2.drawContours(imgPattern, [maxContour], 0, color, 7)
-        imgPattern = cv2.bitwise_and(imgPattern, imgPattern, mask = imgInv)
+        imgPattern = cv2.bitwise_and(imgPattern, imgPattern, mask = mask)
         resultPattern = imgPattern[1:(h+1), 1:(w+1), 0:3].copy()
-    
+
         return (resultImg, resultPattern)
 
 
@@ -137,7 +174,7 @@ class PanoWithOutputImgs():
         print('X:{}, Y:{}, x: {}, y:{}, x1: {}, x2: {}, y1: {}, y2: {}'
                 .format(panoImg.shape[1], panoImg.shape[0], x, y, x1, x2, y1, y2))
         augOutImg = panoImg.copy()
-        
+
         outputGray = cv2.cvtColor(outputImg, cv2.COLOR_BGR2GRAY)
         ret, mask = cv2.threshold(outputGray, 10, 255, cv2.THRESH_BINARY)
         maskInv = cv2.bitwise_not(mask)
@@ -159,7 +196,7 @@ class PanoWithOutputImgs():
             for imgType in self.imgTypeList:
                 imgDict = self.imgDictArray[self.thresList.index(thres)][self.imgTypeList.index(imgType)]
                 for fileName, panoImg in imgDict.items():
-                    cv2.imwrite(path + 'PanoWithOutputImg-' + fileName + '-' + str(thres) + '-' + imgtype + '.jpg', panoImg)
+                    cv2.imwrite(path + 'PanoWithOutputImg-' + fileName + '-' + imgType + '-' + str(thres) + '.jpg', panoImg)
             rows.append([fileName])
         return rows
 
@@ -168,10 +205,10 @@ class Inference():
 
     def __init__(self, checkpointPath, configPath):
 
-        pano_mean = 0.45443202007
-        pano_std = 0.19530903237
-        box_mean = 0.130272261
-        box_std = 0.33651706451
+        pano_mean = 0.45027832038634535
+        pano_std = 0.20185562393314094
+        box_mean = 0.13363356408655208
+        box_std = 0.34017366082624484
 
         config = json.load(open(configPath))
         self.model_config = config["model"]
@@ -211,8 +248,9 @@ class Inference():
         else:
             self.model.cpu()
             output = self.model.test(input)
-
-        return output.numpy()
+        output = output.cpu().numpy()
+        print('output: {}'.format(np.unique(output)))
+        return output
 
 
 def postprocess(path, config, dataCsv):
@@ -248,58 +286,65 @@ def postprocess(path, config, dataCsv):
 
     inference = Inference(path, config)
     
-    batchsize = 32
+    batchsize = 196
     currsize = 1
     panoImgList = []
     boxImgList = []
     panoToothNumDic = {}
     panoCoorDic = {}
+    panoSizeDic = {}
 
     for idx, row in inputDf.iterrows():
 
-        if not(currsize > bathsize):
-            panoImgList.append(panoImgPath + row['Cropped.Pano.Img'])
-            boxImgList.append(panoImgPath + row['Cropped.Box.Img'])
+        if not(currsize > batchsize):
+            panoImgList.append(row['Cropped.Pano.Img'])
+            boxImgList.append(row['Cropped.Box.Img'])
             panoToothNumDic[row['Cropped.Pano.Img']] = int(row['Tooth.Num.Panoseg'])
             panoCoorDic[row['Cropped.Pano.Img']] = eval(row['Left.Upmost.Coord'])
+            panoSizeDic[row['Cropped.Pano.Img']] = eval(row['Cropped.Img.Size'])
             currsize += 1
             continue
 
         output = inference.infer(panoImgList, boxImgList)
-
+        print('output infer result: {}'.format(np.unique(output)))
         for i in range(len(panoImgList)):
             panoPath = panoImgList[i]
-            majorImg = output[i][0] 
-            minorImg = output[i][1]
+            tempShape = panoSizeDic[panoPath]
+            shape = (tempShape[1], tempShape[0])
+            majorImg = cv2.resize(output[i, 0], shape, cv2.INTER_CUBIC)
+            minorImg = cv2.resize(output[i, 1], shape, cv2.INTER_CUBIC)
             panoFileName = re.sub('(\S*/)*cropPanoImg-(\S+)-([0-9][0-9]).jpg', '\\2', panoPath)
-            toothNum = panoToothNumDic[panoFileName]
-            leftUpmostCoord = panoCoorDic[panoFileName]
+            toothNum = panoToothNumDic[panoPath]
+            leftUpmostCoord = panoCoorDic[panoPath]
 
             panoWithOutputImgs.updateImg(panoFileName, majorImg, minorImg, toothNum, leftUpmostCoord)
 
-            panoWithOutputImgs.saveImg(saveImgPath)
+        panoWithOutputImgs.saveImg(saveImgPath)
 
         # reinitialize
         currsize = 1
-        panoimgList = []
-        boximgList = []
+        panoImgList = []
+        boxImgList = []
         panoToothNumDic = {}
         panoCoorDic = {}
+        panoSizeDic = {}
 
     if not (currsize == 1):
         output = inference.infer(panoImgList, boxImgList)
 
         for i in range(len(panoImgList)):
-            panoFileName = panoImgList[i]
-            majorImg = output[i][0] 
-            minorImg = output[i][1]
-            panoFileName = re.sub('(\S*/)*cropPanoImg-(\S+)-([0-9][0-9]).jpg', '\\2', panoFileName)
-            toothNum = panoToothNumDic[panoFileName]
-            leftUpmostCoord = panoCoorDic[panoFileName]
+            panoPath = panoImgList[i]
+            tempShape = panoSizeDic[panoPath]
+            shape = (tempShape[1], tempShape[0])
+            majorImg = cv2.resize(output[i, 0], shape)
+            minorImg = cv2.resize(output[i, 1], shape)
+            panoFileName = re.sub('(\S*/)*cropPanoImg-(\S+)-([0-9][0-9]).jpg', '\\2', panoPath)
+            toothNum = panoToothNumDic[panoPath]
+            leftUpmostCoord = panoCoorDic[panoPath]
 
             panoWithOutputImgs.updateImg(panoFileName, majorImg, minorImg, toothNum, leftUpmostCoord)
 
-            panoWithOutputImgs.saveImg(saveImgPath)
+        panoWithOutputImgs.saveImg(saveImgPath)
 
     rows = panoWithOutputImgs.saveImg(saveImgPath)
     return
