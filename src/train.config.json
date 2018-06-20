@@ -1,0 +1,84 @@
+{
+    "experiment": {
+        "reproducible": true
+    },
+
+    "logging": {
+        "log": true,
+        "title": "dna2"
+    },
+
+    "augmentation": {
+        "channel": 2,
+        "size": [64, 32],
+        "train": [
+        ],
+        "val": [
+
+        ]
+    },
+
+    "dataset": {
+        "pretrain": false,
+        "datadir": "../data/Stat-DataSet.csv",
+        "name": "ThirdSet-10-mini",
+        "filter": {
+            "train": [ "train" ],
+            "val": [ "val" ]
+        }
+    },
+
+    "model": {
+        "category": "Vanilla",
+        "param": {
+            "module": {
+                "type": "DNA",
+                "param": {
+                    "channels": 2,
+                    "classes": 2,
+                    "unit": 10
+                }
+            },
+            "weight_init": "he_uniform",
+            "optimizer": {
+                "type": "SGD",
+                "param": {
+                    "weight_decay": 1e-5,
+                    "lr": 1,
+                    "momentum": 0.9
+                }
+            },
+            "scheduler": {
+                "type": "Step",
+                "param": {
+                    "step_size": 30, 
+                    "gamma": 0.1
+                }
+            },
+            "loss": {
+                "type": "DICE",
+                "param": {
+                    
+                }
+            },
+            "ensemble": false
+        }
+    },
+
+    "metric": [
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "both"} },
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "major"} },
+        { "type": "DICE", "param": {"threshold": 0.5, "mode": "minor"} },
+        { "type": "accuracy", "param": {"threshold": 0.5, "mode": "both"} },
+        { "type": "f1", "param": {"threshold": 0.5, "mode": "major"} },
+        { "type": "f1", "param": {"threshold": 0.5, "mode": "minor"} }
+    ],
+
+    "training": {
+        "checkpoint": "",
+        "epochs": 100,
+        "batch_size": 10,
+        "num_workers": 16,
+        "log_freq": 2
+    }
+}

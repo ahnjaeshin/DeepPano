@@ -1,0 +1,90 @@
+{
+    "logging": {
+        "logdir": true,
+        "title": "pretrain",
+        "start_time": "",
+        "description": "for validation",
+        "trial": 3,
+        "reproducible": true
+    },
+
+    "augmentation": {
+        "size": [64, 32],
+        "train": [
+            { "category": "All", "type": "HFlip" },
+            { "category": "All", "type": "VFlip" },
+            { "category": "All", "type": "Rotate",
+                "param": { "degrees": [-40, 40] }},
+            { "category": "All", "type": "Crop", "param": {"size": [512, 256], "pad_if_needed": true} }
+        ],
+        "val": [
+            { "category": "All", "type": "Crop", "param": {"size": [512, 256], "pad_if_needed": true} }
+        ]
+    },
+
+    "dataset": {
+        "pretrain": true,
+        "data-dir": "../data/Stat-DataSet.csv",
+        "name": "Pretrain-ThirdSet-mini",
+        "filter": {
+            "train": [],
+            "val": []
+        }
+    },
+
+    "model": {
+        "type": "UNET",
+        "param": {
+            "bilinear": false,
+            "unit": 10
+        }
+    },
+
+    "evaluation": {
+        "loss": {
+            "type": "DICE",
+            "param": {}
+        },
+
+        "metrics": [
+            { "type": "IOU", "param": {"threshold": 0.5, "mode": "both"} },
+            { "type": "IOU", "param": {"threshold": 0.5, "mode": "major"} },
+            { "type": "IOU", "param": {"threshold": 0.5, "mode": "minor"} },
+            { "type": "DICE", "param": {"threshold": 0.5, "mode": "both"} },
+            { "type": "DICE", "param": {"threshold": 0.5, "mode": "major"} },
+            { "type": "DICE", "param": {"threshold": 0.5, "mode": "minor"} },
+            { "type": "DICE", "param": {"threshold": 0.8, "mode": "both"} },
+            { "type": "accuracy", "param": {"threshold": 0.5, "mode": "both"} },
+            { "type": "f1", "param": {"threshold": 0.5, "mode": "major"} },
+            { "type": "f1", "param": {"threshold": 0.5, "mode": "minor"} }
+        ]
+    },
+
+    "learning": {
+        "checkpoint": "",
+        "weight_init": "he_uniform",
+        "hard_example_mining": false,
+        "lr_schedule": {
+            "type": "Step",
+            "param": {
+                "step_size": 50, 
+                "gamma": 0.1
+            }
+        },
+        "optimizer": {
+            "type": "SGD",
+            "param": {
+                "weight_decay": 1e-5,
+                "lr": 1
+            }
+        },
+        "emsemble": false
+    },
+
+    "training": {
+        "epochs": 100,
+        "batch_size": 10,
+        "num_workers": 16,
+        "log_freq": 10
+    }
+}

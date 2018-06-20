@@ -1,2 +1,7 @@
 .ipynb_checkpoints/
-rawdata/
+data/
+train/
+.vscode/
+__pycache__/
+result/
+*.pth.tar
